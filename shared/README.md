@@ -5,7 +5,7 @@
 ## 当前版本
 
 - AI 小助手契约：`1.0.0`
-- 状态：`accepted`
+- 状态：`closed`
 - 产品输入：`product/PRD.md`、`product/USER_FLOWS.md`、`product/ACCEPTANCE_CRITERIA.md`
 - 机器可读入口：`contracts/ai-assistant-v1.schema.json`
 - 本地 HTTP 传输：`contracts/http.md`
@@ -14,7 +14,8 @@
 
 - 契约采用 SemVer；新增可选字段为 minor，删除字段、改变必需性或枚举语义为 major。
 - 所有请求和响应必须携带 `contractVersion`；V1 固定为 `1.0.0`。
-- 未知可选字段应忽略；未知枚举值、缺少必需字段或 major 版本不匹配必须拒绝。
+- V1 对象采用闭集字段，未知字段、未知枚举值、缺少必需字段或版本不匹配必须拒绝。
+- 未来 minor 版本如新增可选字段，必须先升级对应 Schema 和消费者；只有声明支持该 minor 版本的消费者才能按新 Schema 接受字段。
 - 破坏性变更必须先登记到 `CHANGE_REQUESTS.md`，说明迁移与回滚方案。
 
 ## V1 实现边界
