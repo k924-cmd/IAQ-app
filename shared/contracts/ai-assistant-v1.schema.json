@@ -309,18 +309,107 @@
         "completedAt": { "$ref": "#/$defs/Timestamp" }
       }
     },
+    "PublicErrorCode": {
+      "type": "string",
+      "enum": ["INVALID_REQUEST", "INPUT_TOO_LONG", "CONTRACT_VERSION_UNSUPPORTED", "IDEMPOTENCY_CONFLICT", "INTENT_UNCLEAR", "CLARIFICATION_REQUIRED", "CONFIRMATION_REQUIRED", "CONFIRMATION_NOT_FOUND", "CONFIRMATION_EXPIRED", "CONFIRMATION_INVALIDATED", "TASK_CONFLICT", "TASK_NOT_FOUND", "INVALID_TASK_TRANSITION", "DEVICE_NOT_FOUND", "DEVICE_AMBIGUOUS", "DEVICE_UNAVAILABLE", "ACTION_UNSUPPORTED", "ENVIRONMENT_UNAVAILABLE", "ENVIRONMENT_STALE", "POLICY_REJECTED", "EXECUTION_FAILED", "EXECUTION_TIMEOUT", "MODEL_UNAVAILABLE", "OPTIMIZER_UNAVAILABLE", "SERVICE_UNAVAILABLE", "INTERNAL_ERROR"]
+    },
     "PublicError": {
       "type": "object",
       "additionalProperties": false,
       "required": ["code", "message", "retryable", "requestId"],
       "properties": {
-        "code": {
-          "type": "string",
-          "enum": ["INVALID_REQUEST", "INPUT_TOO_LONG", "CONTRACT_VERSION_UNSUPPORTED", "IDEMPOTENCY_CONFLICT", "INTENT_UNCLEAR", "CLARIFICATION_REQUIRED", "CONFIRMATION_REQUIRED", "CONFIRMATION_NOT_FOUND", "CONFIRMATION_EXPIRED", "CONFIRMATION_INVALIDATED", "TASK_CONFLICT", "TASK_NOT_FOUND", "INVALID_TASK_TRANSITION", "DEVICE_NOT_FOUND", "DEVICE_AMBIGUOUS", "DEVICE_UNAVAILABLE", "ACTION_UNSUPPORTED", "ENVIRONMENT_UNAVAILABLE", "ENVIRONMENT_STALE", "POLICY_REJECTED", "EXECUTION_FAILED", "EXECUTION_TIMEOUT", "MODEL_UNAVAILABLE", "OPTIMIZER_UNAVAILABLE", "SERVICE_UNAVAILABLE", "INTERNAL_ERROR"]
-        },
+        "code": { "$ref": "#/$defs/PublicErrorCode" },
         "message": { "type": "string", "minLength": 1, "maxLength": 500 },
         "retryable": { "type": "boolean" },
         "requestId": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "AssistantRequestReceivedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["messageLength", "locale"],
+      "properties": {
+        "messageLength": { "type": "integer", "minimum": 0, "maximum": 4000 },
+        "locale": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" }
+      }
+    },
+    "AssistantResponseCompletedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["responseType", "outcome", "durationMs"],
+      "properties": {
+        "responseType": { "$ref": "#/$defs/ResponseType" },
+        "outcome": {
+          "oneOf": [
+            { "const": "completed" },
+            { "$ref": "#/$defs/PublicErrorCode" }
+          ]
+        },
+        "durationMs": { "type": "number", "minimum": 0 }
+      }
+    },
+    "ClarificationPresentedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clarificationKind"],
+      "properties": { "clarificationKind": { "$ref": "#/$defs/ClarificationKind" } }
+    },
+    "ConfirmationPresentedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planKind", "expiresInSeconds"],
+      "properties": {
+        "planKind": { "$ref": "#/$defs/PlanKind" },
+        "expiresInSeconds": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ConfirmationResolvedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolution"],
+      "properties": {
+        "resolution": { "type": "string", "enum": ["confirmed", "cancelled", "expired", "invalidated"] }
+      }
+    },
+    "TaskStateChangedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskType", "fromStatus", "toStatus", "isSimulation"],
+      "properties": {
+        "taskType": { "$ref": "#/$defs/TaskType" },
+        "fromStatus": { "type": "string", "enum": ["none", "scheduled", "running", "paused", "stopped", "failed"] },
+        "toStatus": { "$ref": "#/$defs/TaskStatus" },
+        "isSimulation": { "type": "boolean" }
+      }
+    },
+    "DeviceActionCompletedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deviceType", "action", "receiptStatus", "executionSource"],
+      "properties": {
+        "deviceType": { "$ref": "#/$defs/DeviceType" },
+        "action": { "$ref": "#/$defs/DeviceAction" },
+        "receiptStatus": { "type": "string", "enum": ["succeeded", "noop", "failed", "timed_out", "unknown"] },
+        "executionSource": { "type": "string", "enum": ["mock", "device"] }
+      }
+    },
+    "DependencyDegradedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dependency", "errorCode"],
+      "properties": {
+        "dependency": { "type": "string", "enum": ["model", "device", "environment", "optimizer", "telemetry", "http"] },
+        "errorCode": { "$ref": "#/$defs/PublicErrorCode" }
+      }
+    },
+    "PublicErrorReturnedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["errorCode", "surface", "retryable"],
+      "properties": {
+        "errorCode": { "$ref": "#/$defs/PublicErrorCode" },
+        "surface": { "type": "string", "enum": ["assistant", "http", "frontend"] },
+        "retryable": { "type": "boolean" }
       }
     },
     "AnalyticsEvent": {
@@ -340,7 +429,18 @@
         "conversationId": { "$ref": "#/$defs/Identifier" },
         "taskId": { "$ref": "#/$defs/Identifier" },
         "properties": { "type": "object" }
-      }
+      },
+      "allOf": [
+        { "if": { "properties": { "eventName": { "const": "assistant_request_received" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/AssistantRequestReceivedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "assistant_response_completed" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/AssistantResponseCompletedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "clarification_presented" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/ClarificationPresentedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "confirmation_presented" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/ConfirmationPresentedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "confirmation_resolved" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/ConfirmationResolvedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "task_state_changed" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/TaskStateChangedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "device_action_completed" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/DeviceActionCompletedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "dependency_degraded" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/DependencyDegradedProperties" } } } },
+        { "if": { "properties": { "eventName": { "const": "public_error_returned" } }, "required": ["eventName"] }, "then": { "properties": { "properties": { "$ref": "#/$defs/PublicErrorReturnedProperties" } } } }
+      ]
     },
     "BootstrapResponse": {
       "type": "object",
