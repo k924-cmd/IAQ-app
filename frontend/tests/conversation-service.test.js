@@ -1,0 +1,104 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  API_BASE_URL,
+  createSendMessageRequest,
+  getConversationId,
+  loadBackendSnapshot,
+  sendConversationMessage
+} from '../src/services/conversation-service.js';
+
+function memoryStorage() {
+  const values = new Map();
+  return {
+    getItem: key => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value)
+  };
+}
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload
+  };
+}
+
+test('conversationId 在同一存储中保持稳定，请求携带契约上下文和 continuation', () => {
+  const storage = memoryStorage();
+  const first = getConversationId(storage);
+  const second = getConversationId(storage);
+  assert.equal(first, second);
+
+  const request = createSendMessageRequest('  确认  ', {
+    storage,
+    locale: 'zh-CN',
+    timezone: 'Asia/Shanghai',
+    continuation: { type: 'confirmation', id: 'confirmation-1' }
+  });
+  assert.equal(request.conversationId, first);
+  assert.match(request.clientMessageId, /^client-message-/);
+  assert.equal(request.idempotencyKey, `idempotency-${request.clientMessageId}`);
+  assert.equal(request.message, '确认');
+  assert.equal(request.locale, 'zh-CN');
+  assert.equal(request.timezone, 'Asia/Shanghai');
+  assert.deepEqual(request.continuation, { type: 'confirmation', id: 'confirmation-1' });
+});
+
+test('启动严格按 health 再 bootstrap 获取可信快照', async () => {
+  const calls = [];
+  const bootstrap = {
+    contractVersion: '1.0.0',
+    mode: 'local_mock',
+    devices: [],
+    environment: null,
+    activeTask: null,
+    observedAt: '2026-08-03T00:00:00.000Z'
+  };
+  const fetchImpl = async url => {
+    calls.push(url);
+    return url.endsWith('/health')
+      ? jsonResponse({ status: 'ok', contractVersion: '1.0.0', mode: 'local_mock' })
+      : jsonResponse(bootstrap);
+  };
+  const result = await loadBackendSnapshot({ fetchImpl });
+  assert.deepEqual(calls, [`${API_BASE_URL}/health`, `${API_BASE_URL}/bootstrap`]);
+  assert.equal(result.bootstrap, bootstrap);
+});
+
+test('对话 POST 契约请求并保留后端结构化响应', async () => {
+  let posted;
+  const fetchImpl = async (url, init) => {
+    posted = { url, init, body: JSON.parse(init.body) };
+    return jsonResponse({
+      contractVersion: '1.0.0',
+      requestId: 'request-1',
+      conversationId: posted.body.conversationId,
+      message: { id: 'reply-1', role: 'assistant', content: '请确认。', status: 'complete', createdAt: '2026-08-03T00:00:00.000Z' },
+      responseType: 'confirmation',
+      sources: []
+    });
+  };
+  const response = await sendConversationMessage('打开窗户', {
+    fetchImpl,
+    storage: memoryStorage(),
+    locale: 'zh-CN',
+    timezone: 'Asia/Shanghai'
+  });
+  assert.equal(posted.url, `${API_BASE_URL}/conversations/messages`);
+  assert.equal(posted.init.method, 'POST');
+  assert.equal(posted.body.locale, 'zh-CN');
+  assert.equal(posted.body.timezone, 'Asia/Shanghai');
+  assert.equal(response.responseType, 'confirmation');
+  assert.equal(response.transportMode, 'backend');
+});
+
+test('API 不可用时明确降级为本地 UI Mock', async () => {
+  const response = await sendConversationMessage('你好', {
+    fetchImpl: async () => { throw new TypeError('network down'); },
+    storage: memoryStorage()
+  });
+  assert.equal(response.transportMode, 'ui_mock');
+  assert.match(response.message.content, /本地 UI Mock \/ 未连接后端/);
+  assert.equal(response.sources[0].type, 'mock');
+});

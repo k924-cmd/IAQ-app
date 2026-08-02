@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chatPage } from '../src/pages/chat.js';
+import { devicesPage } from '../src/pages/devices.js';
+import { homePage } from '../src/pages/home.js';
+import { profilePage } from '../src/pages/profile.js';
+import { getReceiptPresentation, getTaskPresentation } from '../src/presentation.js';
+import { createMockDevices } from '../src/mocks/devices.js';
+
+const state = {
+  tab: 'home',
+  deviceView: 'list',
+  devices: createMockDevices(),
+  messages: [],
+  connection: { status: 'disconnected', mode: 'ui_mock' },
+  activeTask: null,
+  isStreaming: false,
+  profile: { name: '测试用户', home: '测试家庭', reminder: '开启', avatar: '' }
+};
+
+test('四页面均显示后端断开边界，快捷场景不映射后端任务', () => {
+  const environment = { score: 84, status: '空气良好', pm25: 12, co2: 650, humidity: 60, temperature: 26, source: 'mock', observedAt: '2026-08-03T00:00:00.000Z' };
+  assert.match(homePage(state, environment), /本地 UI Mock \/ 未连接后端/);
+  assert.match(homePage(state, environment), /仅 UI Mock，不创建后端任务/);
+  assert.match(devicesPage({ ...state, tab: 'devices' }), /本地 UI Mock \/ 未连接后端/);
+  assert.match(chatPage({ ...state, tab: 'chat' }), /本地 UI Mock \/ 未连接后端/);
+  assert.match(profilePage({ ...state, tab: 'profile' }), /本地 UI Mock \/ 未连接后端/);
+});
+
+test('任务状态以不同文字和图标呈现', () => {
+  const presentations = ['scheduled', 'running', 'paused', 'stopped', 'failed'].map(getTaskPresentation);
+  assert.deepEqual(presentations.map(item => item.label), ['待运行', '运行中', '已暂停', '已停止', '失败']);
+  assert.equal(new Set(presentations.map(item => item.icon)).size, 5);
+});
+
+test('部分成功回执具有独立文案和图标', () => {
+  const partial = getReceiptPresentation('partial_success');
+  assert.equal(partial.label, '部分成功');
+  assert.equal(partial.icon, '◐');
+});

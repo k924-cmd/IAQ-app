@@ -5,5 +5,6 @@ export const MOCK_ENVIRONMENT = {
   co2: 650,
   humidity: 60,
   temperature: 26,
-  weather: '晴朗'
+  weather: '晴朗',
+  freshness: 'fresh'
 };

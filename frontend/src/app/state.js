@@ -12,13 +12,14 @@ function readStoredState() {
   }
 }
 
-function createMessage(role, text) {
+function createMessage(role, text, details = {}) {
   return {
     id: crypto.randomUUID?.() || `msg-${Date.now()}-${Math.random()}`,
     role,
     content: text,
     status: 'complete',
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    ...details
   };
 }
 
@@ -27,10 +28,17 @@ const stored = readStoredState();
 export const state = {
   tab: 'home',
   deviceView: stored.deviceView === 'grid' ? 'grid' : 'list',
-  devices: createMockDevices(stored.devices),
-  messages: Array.isArray(stored.messages) && stored.messages.length
-    ? stored.messages.slice(-100)
-    : [createMessage('assistant', '你好，我是 Luna。当前运行在全新的 UI Mock 基线中。')],
+  devices: createMockDevices(),
+  messages: [createMessage('assistant', '你好，我是 Luna。正在连接本地后端；连接失败时会明确切换为本地 UI Mock。', {
+    responseType: 'chat',
+    sourceMode: 'ui_mock'
+  })],
+  connection: {
+    status: 'connecting',
+    mode: 'ui_mock',
+    label: '正在连接本地后端'
+  },
+  activeTask: null,
   profile: {
     name: stored.profile?.name || '林知夏',
     home: stored.profile?.home || '我的家',
@@ -45,8 +53,8 @@ export const state = {
   isStreaming: false
 };
 
-export function addMessage(role, content) {
-  const message = createMessage(role, content);
+export function addMessage(role, content, details = {}) {
+  const message = createMessage(role, content, details);
   state.messages.push(message);
   state.messages = state.messages.slice(-100);
   return message;
@@ -64,8 +72,6 @@ export function addLog(type, text) {
 export function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     deviceView: state.deviceView,
-    devices: state.devices,
-    messages: state.messages,
     profile: state.profile,
     logs: state.logs
   }));

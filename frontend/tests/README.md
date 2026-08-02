@@ -1,3 +1,10 @@
 # Frontend Tests
 
-待引入测试运行器后覆盖四页面导航、设备 Mock、聊天 Mock、资料编辑、持久化和 PWA 静态资源。
+使用 Node.js 内置测试运行器，不新增第三方依赖：
+
+```powershell
+cd frontend
+npm test
+```
+
+当前覆盖对话请求标识、locale/timezone/continuation、health/bootstrap 启动顺序、断线 UI Mock 降级、四页面来源标识、快捷场景边界、任务状态和部分成功文案。

@@ -1,7 +1,7 @@
-const CACHE_NAME = 'breath-forest-ui-v2';
+const CACHE_NAME = 'breath-forest-ui-v3';
 const CORE_ASSETS = [
-  './', './index.html', './styles.css', './manifest.webmanifest', './src/main.js',
-  './src/app/state.js', './src/components/icons.js',
+  './', './index.html', './styles.css?v=20260803-3', './manifest.webmanifest', './src/main.js?v=20260803-3',
+  './src/app/state.js', './src/components/icons.js', './src/presentation.js', './src/utils/html.js',
   './src/pages/home.js', './src/pages/devices.js', './src/pages/chat.js', './src/pages/profile.js',
   './src/services/conversation-service.js', './src/services/device-service.js', './src/services/environment-service.js',
   './src/mocks/conversation.js', './src/mocks/devices.js', './src/mocks/environment.js',

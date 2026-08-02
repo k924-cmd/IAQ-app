@@ -7,5 +7,5 @@ const replies = [
 export async function getMockReply(message) {
   await new Promise(resolve => setTimeout(resolve, 240));
   return replies.find(item => item.match.test(message))?.text
-    || '我已收到你的消息。当前是纯 UI Mock 阶段，新的 AI 处理逻辑将在共享契约确定后接入。';
+    || '我已收到你的消息。当前仅保留界面演示，不会执行后端任务或控制真实设备。';
 }
