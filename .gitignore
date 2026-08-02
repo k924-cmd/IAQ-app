@@ -1,0 +1,10 @@
+# Local build output
+.release/
+
+# Local development artifacts
+*.log
+.tmp/
+
+# System and editor files
+Thumbs.db
+.DS_Store
