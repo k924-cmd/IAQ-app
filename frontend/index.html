@@ -2,6 +2,9 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#d9d1bd" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -10,11 +13,60 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="icons/luna-apple.png" />
     <link rel="icon" href="icons/luna-192.png" type="image/png" />
-    <link rel="stylesheet" href="styles.css?v=20260803-3" />
+    <link rel="stylesheet" href="styles.css?v=20260803-4" />
     <title>呼吸森林</title>
   </head>
   <body>
-    <main id="app" aria-live="polite"></main>
-    <script type="module" src="src/main.js?v=20260803-3"></script>
+    <main id="app" aria-live="polite"><p role="status">正在准备呼吸森林…</p></main>
+    <script>
+      (() => {
+        const APP_VERSION = '20260803-4';
+        const CACHE_PREFIX = 'breath-forest-ui-';
+        const RECOVERY_PARAM = 'bf-bootstrap';
+        const localHosts = ['localhost', '127.0.0.1', '::1'];
+        const isLocal = localHosts.includes(location.hostname);
+
+        function showBootstrapError(error) {
+          const root = document.querySelector('#app');
+          const heading = document.createElement('h1');
+          const copy = document.createElement('p');
+          heading.textContent = '呼吸森林启动失败';
+          copy.textContent = '本地资源恢复未完成，请刷新页面；若问题持续，请关闭该页面后重新打开。';
+          root.replaceChildren(heading, copy);
+          console.error('Breath Forest bootstrap failed', error);
+        }
+
+        async function clearLocalAppCaches() {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(registration => registration.unregister()));
+          }
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames
+              .filter(cacheName => cacheName.startsWith(CACHE_PREFIX))
+              .map(cacheName => caches.delete(cacheName)));
+          }
+        }
+
+        window.__BREATH_FOREST_BOOTSTRAP__ = (async () => {
+          if (isLocal) {
+            const wasControlled = Boolean(navigator.serviceWorker?.controller);
+            await clearLocalAppCaches();
+            const recoveryUrl = new URL(location.href);
+            if (wasControlled && recoveryUrl.searchParams.get(RECOVERY_PARAM) !== APP_VERSION) {
+              recoveryUrl.searchParams.set(RECOVERY_PARAM, APP_VERSION);
+              location.replace(recoveryUrl.href);
+              return;
+            }
+            if (recoveryUrl.searchParams.has(RECOVERY_PARAM)) {
+              recoveryUrl.searchParams.delete(RECOVERY_PARAM);
+              history.replaceState(null, '', recoveryUrl.href);
+            }
+          }
+          await import(`./src/main.js?v=${APP_VERSION}`);
+        })().catch(showBootstrapError);
+      })();
+    </script>
   </body>
 </html>

@@ -1,6 +1,6 @@
-import { icon } from '../components/icons.js';
-import { formatObservedAt, getConnectionPresentation, getSourceLabel } from '../presentation.js';
-import { escapeHtml } from '../utils/html.js';
+import { icon } from '../components/icons.js?v=20260803-4';
+import { formatObservedAt, getConnectionPresentation, getSourceLabel } from '../presentation.js?v=20260803-4';
+import { escapeHtml } from '../utils/html.js?v=20260803-4';
 
 export function homePage(state, environment) {
   const connection = getConnectionPresentation(state.connection);

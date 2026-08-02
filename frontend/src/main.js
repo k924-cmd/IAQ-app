@@ -1,14 +1,14 @@
-import { state, addLog, addMessage, saveState } from './app/state.js';
-import { icon } from './components/icons.js';
-import { homePage } from './pages/home.js';
-import { devicesPage } from './pages/devices.js';
-import { chatPage } from './pages/chat.js';
-import { profilePage } from './pages/profile.js';
-import { loadBackendSnapshot, sendConversationMessage } from './services/conversation-service.js';
-import { toggleMockDevice } from './services/device-service.js';
-import { getEnvironmentSnapshot } from './services/environment-service.js';
-import { createMockDevices, findDevice, getDeviceMeta, normalizeBackendDevices } from './mocks/devices.js';
-import { escapeHtml } from './utils/html.js';
+import { state, addLog, addMessage, saveState } from './app/state.js?v=20260803-4';
+import { icon } from './components/icons.js?v=20260803-4';
+import { homePage } from './pages/home.js?v=20260803-4';
+import { devicesPage } from './pages/devices.js?v=20260803-4';
+import { chatPage } from './pages/chat.js?v=20260803-4';
+import { profilePage } from './pages/profile.js?v=20260803-4';
+import { loadBackendSnapshot, sendConversationMessage } from './services/conversation-service.js?v=20260803-4';
+import { toggleMockDevice } from './services/device-service.js?v=20260803-4';
+import { getEnvironmentSnapshot } from './services/environment-service.js?v=20260803-4';
+import { createMockDevices, findDevice, getDeviceMeta, normalizeBackendDevices } from './mocks/devices.js?v=20260803-4';
+import { escapeHtml } from './utils/html.js?v=20260803-4';
 import {
   formatObservedAt,
   getActionLabel,
@@ -18,7 +18,7 @@ import {
   getSourceLabel,
   getTaskName,
   getTaskPresentation
-} from './presentation.js';
+} from './presentation.js?v=20260803-4';
 
 const root = document.querySelector('#app');
 let environment = await getEnvironmentSnapshot();
@@ -406,9 +406,7 @@ function bind() {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     const local = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
-    if (local) {
-      navigator.serviceWorker.getRegistrations().then(registrations => Promise.all(registrations.map(registration => registration.unregister())));
-    } else {
+    if (!local) {
       navigator.serviceWorker.register('./sw.js');
     }
   });

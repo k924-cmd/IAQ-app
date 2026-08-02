@@ -1,6 +1,6 @@
-import { icon } from '../components/icons.js';
-import { getConnectionPresentation } from '../presentation.js';
-import { escapeHtml } from '../utils/html.js';
+import { icon } from '../components/icons.js?v=20260803-4';
+import { getConnectionPresentation } from '../presentation.js?v=20260803-4';
+import { escapeHtml } from '../utils/html.js?v=20260803-4';
 
 export function profilePage(state) {
   const avatar = state.profile.avatar ? `<img src="${state.profile.avatar}" alt="${escapeHtml(state.profile.name)}">` : icon('leaf');
