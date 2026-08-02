@@ -120,6 +120,27 @@ export class AssistantService {
     return this.repository.conversations.delete(conversationId);
   }
 
+  async getBootstrap(scopeId) {
+    let environment = null;
+    try {
+      const snapshot = await this.environment.read();
+      const age = this.clock.now().getTime() - new Date(snapshot?.observedAt).getTime();
+      if (this.#validEnvironment(snapshot) && age >= -1_000 && age <= ENVIRONMENT_FRESHNESS_MS && snapshot.freshness === "fresh") {
+        environment = clone(snapshot);
+      }
+    } catch {
+      environment = null;
+    }
+    return {
+      contractVersion: CONTRACT_VERSION,
+      devices: this.registry.list(),
+      environment,
+      activeTask: this.taskService.current(scopeId),
+      mode: "local_mock",
+      observedAt: this.clock.iso(),
+    };
+  }
+
   #validateRequest(request, transport, requestId) {
     if (!request || typeof request !== "object" || Array.isArray(request)) throw publicError("INVALID_REQUEST", "请求格式无效。", { requestId });
     const allowedFields = new Set(["contractVersion", "conversationId", "clientMessageId", "idempotencyKey", "message", "locale", "timezone", "continuation"]);

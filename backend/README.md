@@ -10,9 +10,14 @@
 cd backend
 node src/demo.js
 node --test
+npm run start:http
 ```
 
 `demo.js` 只展示本地 Mock 环境查询，并在输出中明确标记其非真实来源。项目也提供 `npm start`、`npm test` 和 `npm run test:ac` 脚本。
+
+`npm run start:http` 使用 Node.js 内置 HTTP 服务，默认只监听 `127.0.0.1:8787`。它提供 `GET /v1/health`、`GET /v1/bootstrap`、`POST /v1/conversations/messages` 与 CORS 预检；默认只接受来自 `http://localhost:4173` 和 `http://127.0.0.1:4173` 的浏览器请求。命令行可用非敏感环境变量 `HOST`、`PORT`、`ALLOWED_ORIGINS` 覆盖本地配置。请求体限制为 64 KiB，处理期限为 15 秒；本地 `actorId` 与 `scopeId` 始终由服务端配置注入，客户端身份头不会被信任。该入口仍只连接确定性 Fake/Mock/Replay 适配器，不会联网或连接真实模型、设备。
+
+代码内可通过 `createHttpAssistantServer({ port: 0 })` 创建服务；`await service.start()` 返回实际随机端口，`await service.close()` 可完成关闭，适合本地联调与测试。
 
 ## 可信链路
 
