@@ -19,13 +19,13 @@
 | `requestId` | 可选 | 有对应请求时携带；不放入请求正文 |
 | `conversationId` | 可选 | 只用不可读标识，不嵌入用户身份 |
 | `taskId` | 可选 | 仅任务相关事件携带 |
-| `properties` | Schema 必需 | 只放当前事件允许的属性；不放任意扩展或自由文本 |
+| `properties` | 必需 | 只放当前事件必需且允许的属性；不放任意扩展或自由文本 |
 
 顶层字段采用白名单：除上表 9 个字段外不得发送其他顶层字段。事实来源应在业务响应和回执中保留，不得通过改写事件 `source` 来隐去 Mock/Replay 属性。
 
 ## 3. V1 事件字典
 
-| `eventName` | 何时发送 | `properties` 最小允许字段 | 运营口径 |
+| `eventName` | 何时发送 | `properties` 必需且仅允许字段 | 运营口径 |
 |---|---|---|---|
 | `assistant_request_received` | 请求通过传输层基础校验并进入助手链路 | `messageLength`, `locale` | 只记录长度和语言，不记录 `message` |
 | `assistant_response_completed` | 一次结构化回复完成 | `responseType`, `outcome`, `durationMs` | `responseType` 按会话契约；不记录回复正文 |
@@ -37,37 +37,42 @@
 | `dependency_degraded` | 依赖不可用且业务进入明确降级 | `dependency`, `errorCode` | 只记录稳定依赖类型与公开错误码，不记录 URL、异常消息或堆栈 |
 | `public_error_returned` | 向用户返回公开错误 | `errorCode`, `surface`, `retryable` | 只记录公开错误码和展示面，不记录 `message` 或内部错误 |
 
-“最小允许字段”是当前运营白名单。未经共享契约升级和协调确认，不得在 `properties` 中增加计划摘要、错误消息、设备名、用户输入、助手回复或任意 `metadata`。
+上表字段由共享 Schema 按 `eventName` 逐事件限定，少字段或多字段都不合约。未经共享契约升级，不得在 `properties` 中增加计划摘要、错误消息、设备名、用户输入、助手回复或任意 `metadata`。
 
-## 4. 复用已有业务契约的联调口径
+## 4. 共享契约约束的属性类型与枚举
 
-事件契约当前只规定属性名和必需性，未对下列属性类型或枚举做机器可读约束。下表是为避免与现有业务契约冲突而采用的运营保守检查口径，不是新的共享契约；实现前仍需协调窗口确认。
+下表是 `shared/contracts/ai-assistant-v1.schema.json` v1.0.0 中逐事件属性约束的运营视图。机器校验以共享 Schema 为准，本文不单独定义兼容规则。
 
 | 属性 | 允许值或类型 |
 |---|---|
-| `messageLength` | 非负整数，且不得用长度外的方式编码原文 |
-| `locale` | 请求契约中的 locale，例如 `zh-CN` |
+| `messageLength` | 0–4000 的整数，且不得用长度外的方式编码原文 |
+| `locale` | 符合 `^[a-z]{2,3}(-[A-Z]{2})?$`，例如 `zh-CN` |
 | `responseType` | `chat`、`knowledge`、`environment_status`、`device_status`、`clarification`、`confirmation`、`task_status`、`execution_result`、`rejection`、`error` |
+| `outcome` | `completed` 或 `shared/contracts/errors.md` 中的稳定公开错误码 |
 | `durationMs` | 非负数值，不包含时间点或端点信息 |
 | `clarificationKind` | `device`、`action`、`time`、`mode`、`task_conflict`、`reference` |
+| `planKind` | `single_device`、`cooking_guard`、`optimization_task`、`task_replacement` |
 | `expiresInSeconds` | 非负整数；V1 默认待确认有效期为 120 秒 |
+| `resolution` | `confirmed`、`cancelled`、`expired`、`invalidated` |
 | `taskType` | `cooking_guard` 或 `optimization` |
-| `fromStatus` / `toStatus` | `scheduled`、`running`、`paused`、`stopped`、`failed` |
+| `fromStatus` | `none`、`scheduled`、`running`、`paused`、`stopped`、`failed` |
+| `toStatus` | `scheduled`、`running`、`paused`、`stopped`、`failed` |
 | `isSimulation` | boolean；优化任务必须为 `true` |
 | `deviceType` | `air_purifier`、`smart_window`、`range_hood`、`fresh_air`、`humidifier`、`circulation_fan` |
 | `action` | `turn_on`、`turn_off`、`open`、`close` |
 | `receiptStatus` | 单项动作回执口径：`succeeded`、`noop`、`failed`、`timed_out`、`unknown` |
+| `executionSource` | 单项设备动作回执来源：`mock` 或 `device`；不用于表示优化任务的 `mock/replay` 来源 |
+| `dependency` | `model`、`device`、`environment`、`optimizer`、`telemetry`、`http` |
 | `errorCode` | `shared/contracts/errors.md` 中的稳定公开错误码，不得使用异常消息代替 |
+| `surface` | `assistant`、`http`、`frontend` |
 | `retryable` | boolean，应与当次公开错误一致 |
-
-`outcome`、`planKind`、`resolution`、`executionSource`、`dependency` 和 `surface` 的闭集枚举尚未由事件契约定义。联调期间只可使用前后端共同确认的稳定代码，不得发送自由文本；该问题需交协调窗口补齐共享契约。
 
 ## 5. 允许/禁止字段检查表
 
 | 检查项 | 通过标准 |
 |---|---|
 | 信封白名单 | 只有第 2 节允许的顶层字段，`eventVersion=1.0.0` |
-| 属性白名单 | `properties` 只包当前 `eventName` 对应的最小允许字段 |
+| 属性白名单 | `properties` 精确包含当前 `eventName` 对应的必需且仅允许字段，没有多余字段 |
 | 必需字段 | 信封和当前事件属性全部存在，类型正确 |
 | 对话内容 | 不存在用户完整输入、助手完整回复、完整会话或其片段 |
 | 凭据 | 不存在 API Key、Secret、Token、设备凭据或可执行连接信息 |
@@ -78,9 +83,6 @@
 | Mock/Replay 真实性 | 事件不会被用于声称真实模型、真实设备、真实 DQN 或真实收益 |
 | 发送失败 | 事件网关断开、超时或抛错时，主响应和业务副作用与未启用事件时一致 |
 
-## 6. 待协调窗口确认
+## 6. 事件契约收口状态
 
-1. `events.md` 表述事件“可包含允许的事件属性”，JSON Schema 则要求顶层 `properties` 必需；需统一必需性语义。
-2. JSON Schema 对 `properties` 仍是任意 object，尚未按 `eventName` 约束字段和类型。
-3. `outcome`、`planKind`、`resolution`、`executionSource`、`dependency` 和 `surface` 需补齐闭集枚举及版本兼容规则。
-4. `device_action_completed.executionSource` 与业务契约中的动作回执来源 `mock/device` 、优化任务来源 `mock/replay` 的对应关系需明确。
+main 提交 `9419a34` 已明确 `properties` 必需性、逐事件字段/类型/枚举白名单以及 `executionSource` 语义。原第 6 节四项待确认问题均已关闭；联调应直接使用 v1.0.0 共享 Schema 验证事件。
