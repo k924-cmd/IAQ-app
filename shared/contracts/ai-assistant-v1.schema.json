@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://breath-forest.local/contracts/ai-assistant-v1.schema.json",
+  "title": "Breath Forest AI Assistant V1 Contract",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/SendMessageRequest" },
+    { "$ref": "#/$defs/SendMessageResponse" }
+  ],
+  "$defs": {
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Source": {
+      "type": "string",
+      "enum": ["mock", "replay", "sensor", "device", "rule", "model", "template"]
+    },
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "observedAt"],
+      "properties": {
+        "type": { "$ref": "#/$defs/Source" },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "referenceId": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "ConversationMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "content", "status", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string", "maxLength": 12000 },
+        "status": { "type": "string", "enum": ["pending", "complete", "error"] },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ContinuationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string", "enum": ["clarification", "confirmation"] },
+        "id": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "SendMessageRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "conversationId", "clientMessageId", "idempotencyKey", "message", "locale", "timezone"],
+      "properties": {
+        "contractVersion": { "const": "1.0.0" },
+        "conversationId": { "$ref": "#/$defs/Identifier" },
+        "clientMessageId": { "$ref": "#/$defs/Identifier" },
+        "idempotencyKey": { "$ref": "#/$defs/Identifier" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "locale": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "continuation": { "$ref": "#/$defs/ContinuationRef" }
+      }
+    },
+    "ResponseType": {
+      "type": "string",
+      "enum": ["chat", "knowledge", "environment_status", "device_status", "clarification", "confirmation", "task_status", "execution_result", "rejection", "error"]
+    },
+    "ClarificationKind": {
+      "type": "string",
+      "enum": ["device", "action", "time", "mode", "task_conflict", "reference"]
+    },
+    "PendingClarification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clarificationId", "originalRequestId", "kind", "prompt", "options", "createdAt", "expiresAt"],
+      "properties": {
+        "clarificationId": { "$ref": "#/$defs/Identifier" },
+        "originalRequestId": { "$ref": "#/$defs/Identifier" },
+        "kind": { "$ref": "#/$defs/ClarificationKind" },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "options": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+        },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "DeviceType": {
+      "type": "string",
+      "enum": ["air_purifier", "smart_window", "range_hood", "fresh_air", "humidifier", "circulation_fan"]
+    },
+    "DeviceAction": {
+      "type": "string",
+      "enum": ["turn_on", "turn_off", "open", "close"]
+    },
+    "Device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "aliases", "room", "connectionStatus", "controlSupport", "availableActions", "state", "stateVersion", "observedAt", "source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "type": { "$ref": "#/$defs/DeviceType" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "aliases": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+        "room": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "connectionStatus": { "type": "string", "enum": ["online", "offline", "unknown", "unavailable"] },
+        "controlSupport": { "type": "string", "enum": ["supported", "read_only", "not_integrated"] },
+        "availableActions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/DeviceAction" } },
+        "state": { "type": "string", "enum": ["on", "off", "open", "closed", "unknown"] },
+        "stateVersion": { "type": "integer", "minimum": 0 },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "source": { "type": "string", "enum": ["mock", "device"] }
+      }
+    },
+    "DeviceCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "idempotencyKey", "planId", "deviceId", "action", "expectedStateVersion", "issuedAt"],
+      "properties": {
+        "requestId": { "$ref": "#/$defs/Identifier" },
+        "idempotencyKey": { "$ref": "#/$defs/Identifier" },
+        "planId": { "$ref": "#/$defs/Identifier" },
+        "deviceId": { "$ref": "#/$defs/Identifier" },
+        "action": { "$ref": "#/$defs/DeviceAction" },
+        "expectedStateVersion": { "type": "integer", "minimum": 0 },
+        "issuedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "EnvironmentSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pm25", "co2", "humidity", "temperature", "score", "status", "observedAt", "source", "freshness"],
+      "properties": {
+        "pm25": { "type": "number", "minimum": 0 },
+        "co2": { "type": "number", "minimum": 0 },
+        "humidity": { "type": "number", "minimum": 0, "maximum": 100 },
+        "temperature": { "type": "number" },
+        "score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "status": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "source": { "type": "string", "enum": ["mock", "replay", "sensor"] },
+        "freshness": { "type": "string", "enum": ["fresh", "stale"] }
+      }
+    },
+    "SemanticCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent", "entities", "evidence", "source", "confidence"],
+      "properties": {
+        "intent": {
+          "type": "string",
+          "enum": ["chat", "knowledge_query", "environment_query", "device_query", "device_control", "cooking_guard_create", "optimization_create", "task_query", "task_pause", "task_resume", "task_stop", "confirm", "cancel", "unknown"]
+        },
+        "entities": { "type": "object" },
+        "evidence": { "type": "string", "maxLength": 4000 },
+        "source": { "type": "string", "enum": ["rule", "model"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "PlannedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionId", "deviceId", "deviceType", "action", "targetState", "expectedStateVersion"],
+      "properties": {
+        "actionId": { "$ref": "#/$defs/Identifier" },
+        "deviceId": { "$ref": "#/$defs/Identifier" },
+        "deviceType": { "$ref": "#/$defs/DeviceType" },
+        "action": { "$ref": "#/$defs/DeviceAction" },
+        "targetState": { "type": "string", "enum": ["on", "off", "open", "closed"] },
+        "expectedStateVersion": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "PlanKind": {
+      "type": "string",
+      "enum": ["single_device", "cooking_guard", "optimization_task", "task_replacement"]
+    },
+    "ExecutionPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planId", "planHash", "kind", "summary", "actions", "requiresConfirmation", "createdAt", "expiresAt"],
+      "properties": {
+        "planId": { "$ref": "#/$defs/Identifier" },
+        "planHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "kind": { "$ref": "#/$defs/PlanKind" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "actions": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/PlannedAction" }
+        },
+        "requiresConfirmation": { "type": "boolean" },
+        "taskVersion": { "type": "integer", "minimum": 0 },
+        "scheduledFor": { "$ref": "#/$defs/Timestamp" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isSimulation": { "type": "boolean" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "PolicyDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "reasonCodes", "alternatives"],
+      "properties": {
+        "outcome": { "type": "string", "enum": ["allow", "confirm", "clarify", "reject"] },
+        "reasonCodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+        },
+        "alternatives": {
+          "type": "array",
+          "maxItems": 5,
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        }
+      }
+    },
+    "PendingConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmationId", "conversationId", "plan", "deviceStateVersions", "status", "createdAt", "expiresAt"],
+      "properties": {
+        "confirmationId": { "$ref": "#/$defs/Identifier" },
+        "conversationId": { "$ref": "#/$defs/Identifier" },
+        "plan": { "$ref": "#/$defs/ExecutionPlan" },
+        "deviceStateVersions": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "taskVersion": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled", "expired", "invalidated"] },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "TaskType": {
+      "type": "string",
+      "enum": ["cooking_guard", "optimization"]
+    },
+    "TaskStatus": {
+      "type": "string",
+      "enum": ["scheduled", "running", "paused", "stopped", "failed"]
+    },
+    "AutomationTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskId", "scopeId", "taskVersion", "type", "status", "isSimulation", "executionSource", "createdAt", "updatedAt"],
+      "properties": {
+        "taskId": { "$ref": "#/$defs/Identifier" },
+        "scopeId": { "$ref": "#/$defs/Identifier" },
+        "taskVersion": { "type": "integer", "minimum": 0 },
+        "type": { "$ref": "#/$defs/TaskType" },
+        "mode": { "type": "string", "enum": ["comfort", "balanced", "eco"] },
+        "status": { "$ref": "#/$defs/TaskStatus" },
+        "isSimulation": { "type": "boolean" },
+        "executionSource": { "type": "string", "enum": ["mock", "replay"] },
+        "scheduledFor": { "$ref": "#/$defs/Timestamp" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "optimization" } }, "required": ["type"] },
+          "then": { "required": ["mode"], "properties": { "isSimulation": { "const": true } } }
+        }
+      ]
+    },
+    "ActionReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionId", "deviceId", "requestedAction", "status", "source"],
+      "properties": {
+        "actionId": { "$ref": "#/$defs/Identifier" },
+        "deviceId": { "$ref": "#/$defs/Identifier" },
+        "requestedAction": { "$ref": "#/$defs/DeviceAction" },
+        "actualState": { "type": "string", "enum": ["on", "off", "open", "closed", "unknown"] },
+        "status": { "type": "string", "enum": ["succeeded", "noop", "failed", "timed_out", "unknown"] },
+        "errorCode": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "source": { "type": "string", "enum": ["mock", "device"] }
+      }
+    },
+    "ExecutionReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receiptId", "requestId", "planId", "status", "actions", "source", "startedAt", "completedAt"],
+      "properties": {
+        "receiptId": { "$ref": "#/$defs/Identifier" },
+        "requestId": { "$ref": "#/$defs/Identifier" },
+        "planId": { "$ref": "#/$defs/Identifier" },
+        "status": { "type": "string", "enum": ["succeeded", "noop", "partial_success", "failed", "timed_out", "unknown"] },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/ActionReceipt" }
+        },
+        "source": { "type": "string", "enum": ["mock", "device"] },
+        "startedAt": { "$ref": "#/$defs/Timestamp" },
+        "completedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "PublicError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable", "requestId"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["INVALID_REQUEST", "INPUT_TOO_LONG", "CONTRACT_VERSION_UNSUPPORTED", "IDEMPOTENCY_CONFLICT", "INTENT_UNCLEAR", "CLARIFICATION_REQUIRED", "CONFIRMATION_REQUIRED", "CONFIRMATION_NOT_FOUND", "CONFIRMATION_EXPIRED", "CONFIRMATION_INVALIDATED", "TASK_CONFLICT", "TASK_NOT_FOUND", "INVALID_TASK_TRANSITION", "DEVICE_NOT_FOUND", "DEVICE_AMBIGUOUS", "DEVICE_UNAVAILABLE", "ACTION_UNSUPPORTED", "ENVIRONMENT_UNAVAILABLE", "ENVIRONMENT_STALE", "POLICY_REJECTED", "EXECUTION_FAILED", "EXECUTION_TIMEOUT", "MODEL_UNAVAILABLE", "OPTIMIZER_UNAVAILABLE", "SERVICE_UNAVAILABLE", "INTERNAL_ERROR"]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "retryable": { "type": "boolean" },
+        "requestId": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "AnalyticsEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventName", "eventVersion", "occurredAt", "source", "properties"],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/Identifier" },
+        "eventName": {
+          "type": "string",
+          "enum": ["assistant_request_received", "assistant_response_completed", "clarification_presented", "confirmation_presented", "confirmation_resolved", "task_state_changed", "device_action_completed", "dependency_degraded", "public_error_returned"]
+        },
+        "eventVersion": { "const": "1.0.0" },
+        "occurredAt": { "$ref": "#/$defs/Timestamp" },
+        "source": { "type": "string", "enum": ["frontend", "backend"] },
+        "requestId": { "$ref": "#/$defs/Identifier" },
+        "conversationId": { "$ref": "#/$defs/Identifier" },
+        "taskId": { "$ref": "#/$defs/Identifier" },
+        "properties": { "type": "object" }
+      }
+    },
+    "SendMessageResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "requestId", "conversationId", "message", "responseType", "sources"],
+      "properties": {
+        "contractVersion": { "const": "1.0.0" },
+        "requestId": { "$ref": "#/$defs/Identifier" },
+        "conversationId": { "$ref": "#/$defs/Identifier" },
+        "message": { "$ref": "#/$defs/ConversationMessage" },
+        "responseType": { "$ref": "#/$defs/ResponseType" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceRef" }
+        },
+        "clarification": { "$ref": "#/$defs/PendingClarification" },
+        "confirmation": { "$ref": "#/$defs/PendingConfirmation" },
+        "task": { "$ref": "#/$defs/AutomationTask" },
+        "receipt": { "$ref": "#/$defs/ExecutionReceipt" },
+        "error": { "$ref": "#/$defs/PublicError" }
+      }
+    }
+  }
+}
