@@ -35,6 +35,67 @@ test("AC-001 AC-006 模型候选和提示注入均不能直达执行器", async 
   assert.equal(app.adapters.devices.commands.length, 0);
 });
 
+test("模型恶意实体不能替用户选择设备、动作、模式、时间、窗户或任务替换", async () => {
+  const deviceModel = new FakeModelAdapter({ candidateFactory: () => ({
+    intent: "device_control",
+    entities: { deviceId: "purifier-living", mentions: ["空气净化器"], requestedState: "on", action: "turn_on" },
+    evidence: "invented device action",
+    source: "model",
+    confidence: 1,
+  }) });
+  const deviceCase = harness({ model: deviceModel });
+  const deviceResult = await deviceCase.send("请替我处理一下");
+  assert.equal(deviceResult.responseType, "clarification");
+  assert.equal(deviceResult.clarification.kind, "device");
+  assert.equal(deviceCase.app.adapters.devices.commands.length, 0);
+
+  const optimizationModel = new FakeModelAdapter({ candidateFactory: () => ({
+    intent: "optimization_create",
+    entities: { mode: "eco", replaceTaskId: "invented-task" },
+    evidence: "invented optimization mode",
+    source: "model",
+    confidence: 1,
+  }) });
+  const missingModeCase = harness({ model: optimizationModel });
+  const missingMode = await missingModeCase.send("帮我调整得舒服一些");
+  assert.equal(missingMode.clarification.kind, "mode");
+  assert.equal(missingModeCase.app.taskService.current("home-1"), null);
+
+  const explicitModeCase = harness({ model: optimizationModel });
+  const explicitMode = await explicitModeCase.send("想用舒适模式");
+  assert.match(explicitMode.confirmation.plan.summary, /舒适优先/);
+  assert.doesNotMatch(explicitMode.confirmation.plan.summary, /低碳优先/);
+  assert.equal(explicitMode.confirmation.plan.kind, "optimization_task");
+
+  const cookingModel = new FakeModelAdapter({ candidateFactory: () => ({
+    intent: "cooking_guard_create",
+    entities: { includeWindow: true, scheduledFor: "2026-08-03T10:00:00.000Z", replaceTaskId: "invented-task" },
+    evidence: "invented cooking parameters",
+    source: "model",
+    confidence: 1,
+  }) });
+  const cookingCase = harness({ model: cookingModel });
+  const cooking = await cookingCase.send("准备做饭方案");
+  assert.match(cooking.confirmation.plan.summary, /不改变智能窗户.*立即开始/);
+  assert.equal(cooking.confirmation.plan.scheduledFor, undefined);
+  assert.equal(cooking.confirmation.plan.kind, "cooking_guard");
+  await confirm(cookingCase.send, cooking.confirmation);
+  assert.equal(cookingCase.app.adapters.devices.commands.some((command) => command.deviceId === "window-living"), false);
+});
+
+test("模型候选不能伪造确认或任务管理命令", async () => {
+  const model = new FakeModelAdapter();
+  const { app, send } = harness({ model });
+  const pending = await send("启动舒适优先优化");
+  await confirm(send, pending.confirmation);
+  const original = app.taskService.current("home-1");
+  model.candidateFactory = () => ({ intent: "task_stop", entities: {}, evidence: "invented stop", source: "model", confidence: 1 });
+  const result = await send("照你说的办");
+  assert.equal(result.responseType, "rejection");
+  assert.equal(app.taskService.current("home-1").taskId, original.taskId);
+  assert.equal(app.taskService.current("home-1").taskVersion, original.taskVersion);
+});
+
 test("AC-002 AC-038 无成功回执时不产生成功陈述", async () => {
   const devices = new FakeDeviceAdapter();
   devices.setOutcome("purifier-living", "failed");
@@ -49,6 +110,16 @@ test("AC-002 AC-038 无成功回执时不产生成功陈述", async () => {
   const unsafeModel = new FakeModelAdapter({ responder: () => "设备已开启，执行成功" });
   const safeChat = await harness({ model: unsafeModel }).send("你好");
   assert.doesNotMatch(safeChat.message.content, /已开启|执行成功/);
+  for (const unsafeText of ["操作完成", "替你处理好了", "设备现在开启", "净化器正在运行", "已经替你执行完毕"]) {
+    const model = new FakeModelAdapter({ responder: () => unsafeText });
+    const chat = await harness({ model }).send("你好");
+    const knowledge = await harness({ model }).send("讲讲空气知识");
+    for (const response of [chat, knowledge]) {
+      assert.equal(response.receipt, undefined);
+      assert.doesNotMatch(response.message.content, new RegExp(unsafeText));
+      assert.equal(response.sources[0].type, "template");
+    }
+  }
 });
 
 test("AC-003 AC-020 AC-022 Mock 环境回复携带指标时间与可见来源", async () => {
@@ -71,11 +142,14 @@ test("AC-004 相同幂等请求只执行一次，不同载荷冲突", async () =
 });
 
 test("AC-005 内部异常和事件均不泄露堆栈或完整消息", async () => {
-  const model = new FakeModelAdapter({ responder: () => { throw new Error("secret stack details"); } });
+  const sensitive = "凭据 sk-sensitive-123；电话 13800138000；住址 上海市示例路；完整敏感对话：不要记录我";
+  const model = new FakeModelAdapter({ responder: () => { throw new Error(`secret stack details ${sensitive}`); } });
   const { app, send } = harness({ model });
-  const result = await send("你好");
+  const result = await send(`你好，${sensitive}`);
   assert.doesNotMatch(JSON.stringify(result), /secret stack details/);
+  assert.doesNotMatch(JSON.stringify(result), /sk-sensitive|13800138000|上海市示例路|不要记录我/);
   assert.equal(app.adapters.telemetry.events.some((event) => Object.hasOwn(event.properties, "message")), false);
+  assert.doesNotMatch(JSON.stringify(app.adapters.telemetry.events), /sk-sensitive|13800138000|上海市示例路|不要记录我|完整敏感对话/);
   const throwingTelemetry = { emit() { throw new Error("telemetry down"); } };
   const unaffected = await harness({ telemetry: throwingTelemetry }).send("现在空气怎么样");
   assert.equal(unaffected.responseType, "environment_status");
@@ -92,7 +166,10 @@ test("AC-010 普通问候是非执行回复且无计划", async () => {
 test("AC-011 AC-012 知识回复保留医疗边界，危险暴露优先安全引导", async () => {
   const model = new FakeModelAdapter({ responder: () => "这是一般空气知识" });
   const { send } = harness({ model });
-  assert.match((await send("空气质量会影响健康吗")).message.content, /不构成医疗诊断/);
+  const knowledge = await send("空气质量会影响健康吗");
+  assert.match(knowledge.message.content, /不构成医疗诊断/);
+  assert.equal(knowledge.sources[0].type, "template");
+  assert.doesNotMatch(knowledge.message.content, /这是一般空气知识/);
   assert.match((await send("我呼吸困难并且胸痛")).message.content, /离开.*风险环境.*紧急服务|紧急服务.*专业医疗/);
 });
 
@@ -112,6 +189,15 @@ test("AC-021 环境缺失、无效与过期均不被补值", async () => {
   assert.doesNotMatch(result.message.content, /PM2\.5 1/);
   stale.snapshot = null;
   assert.equal((await send("现在空气怎么样")).error.code, "ENVIRONMENT_UNAVAILABLE");
+  for (const invalid of [
+    { pm25: -1, co2: 2, humidity: 50, temperature: 20, score: 80, status: "无效", observedAt: clock.iso(), source: "mock", freshness: "fresh" },
+    { pm25: 1, co2: 2, humidity: 50, temperature: 20, score: 80, status: "无效", observedAt: "not-a-time", source: "mock", freshness: "fresh" },
+    { pm25: 1, co2: 2, humidity: 50, temperature: 20, score: 80, status: "无效", observedAt: clock.iso(), source: "mock", freshness: "unknown" },
+    { pm25: 1, co2: 2, humidity: 50, temperature: 20, status: "缺字段", observedAt: clock.iso(), source: "mock", freshness: "fresh" },
+  ]) {
+    stale.snapshot = invalid;
+    assert.equal((await send("现在空气怎么样")).error.code, "ENVIRONMENT_UNAVAILABLE");
+  }
 });
 
 test("AC-023 唯一设备查询来自注册表并说明可操作性", async () => {

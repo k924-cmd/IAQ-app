@@ -15,6 +15,11 @@ export class TaskService {
     return task && activeStatuses.has(task.status) ? clone(task) : null;
   }
 
+  latest(scopeId) {
+    const task = this.repository.getTask(scopeId);
+    return task ? clone(task) : null;
+  }
+
   create(scopeId, specification) {
     if (this.current(scopeId)) return { conflict: true, task: this.current(scopeId) };
     const now = this.clock.iso();
@@ -36,7 +41,9 @@ export class TaskService {
   }
 
   transition(scopeId, requested) {
-    const task = this.current(scopeId);
+    const activeTask = this.current(scopeId);
+    const latestTask = requested === "stop" ? this.latest(scopeId) : null;
+    const task = activeTask ?? (latestTask?.status === "stopped" ? latestTask : null);
     if (!task) return { found: false, changed: false, task: null };
     const targets = { pause: "paused", resume: "running", stop: "stopped" };
     const target = targets[requested];

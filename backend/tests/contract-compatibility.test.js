@@ -7,6 +7,10 @@ import { harness } from "./helpers.js";
 const schemaPath = fileURLToPath(new URL("../../shared/contracts/ai-assistant-v1.schema.json", import.meta.url));
 const schema = JSON.parse(readFileSync(schemaPath, "utf8"));
 
+// This intentionally validates representative backend responses against the
+// subset of JSON Schema keywords used on those paths. It is not a complete
+// Draft 2020-12 JSON Schema implementation.
+
 function resolve(node) {
   if (!node?.$ref) return node;
   const name = node.$ref.split("/").at(-1);
@@ -50,7 +54,7 @@ function validate(node, value, path = "value") {
   if (node.type === "boolean") assert.equal(typeof value, "boolean", `${path} boolean`);
 }
 
-test("共享契约 v1.0.0 与环境、确认、执行和任务响应兼容", async () => {
+test("共享契约 v1.0.0 代表性响应样例兼容校验（非完整 JSON Schema 验证）", async () => {
   assert.equal(schema.$defs.SendMessageRequest.properties.contractVersion.const, "1.0.0");
   const { send } = harness();
   const environment = await send("现在空气怎么样");

@@ -33,6 +33,8 @@ test("AC-043 当天未来明确时间按时区回显、确认后进入 scheduled
   const result = await confirm(send, pending.confirmation);
   assert.equal(result.task.status, "scheduled");
   assert.equal(result.task.scheduledFor, "2026-08-03T10:00:00.000Z");
+  const query = await send("当前是什么任务");
+  assert.match(query.message.content, /创建时间：2026-08-03T04:00:00\.000Z.*计划时间：2026-08-03T10:00:00\.000Z/);
 });
 
 test("AC-044 过去、含糊、跨日时间均不创建任务", async () => {
@@ -95,17 +97,25 @@ test("AC-053 有效确认只创建 Mock 或 Replay 模拟任务", async () => {
   }
 });
 
-test("AC-054 优化候选经过注册表、动作屏蔽与策略", async () => {
-  const optimizer = new FakeOptimizerAdapter({ candidates: [
-    { deviceId: "humidifier", action: "turn_on" },
-    { deviceId: "window-living", action: "open" },
-    { deviceId: "purifier-living", action: "turn_on" },
-  ] });
-  const { app, send } = harness({ optimizer });
-  await createOptimization(send);
-  const cycle = await app.runOptimizationCycle("home-1");
-  assert.equal(cycle.executed, true);
-  assert.deepEqual(app.adapters.devices.commands.map((item) => item.deviceId), ["purifier-living"]);
+test("AC-054 离线、未接入、非法动作与需确认候选分别被屏蔽", async (context) => {
+  const cases = [
+    { name: "offline", candidate: { deviceId: "purifier-living", action: "turn_on" }, arrange(app) { const device = app.adapters.registry.get("purifier-living"); app.adapters.registry.replace({ ...device, connectionStatus: "offline" }); } },
+    { name: "not-integrated", candidate: { deviceId: "humidifier", action: "turn_on" } },
+    { name: "illegal-action", candidate: { deviceId: "purifier-living", action: "open" } },
+    { name: "confirmation-required", candidate: { deviceId: "window-living", action: "open" } },
+  ];
+  for (const item of cases) {
+    await context.test(item.name, async () => {
+      const optimizer = new FakeOptimizerAdapter({ candidates: [item.candidate] });
+      const { app, send } = harness({ optimizer });
+      await createOptimization(send);
+      item.arrange?.(app);
+      const cycle = await app.runOptimizationCycle("home-1");
+      assert.equal(cycle.executed, false);
+      assert.equal(cycle.reason, "NO_LEGAL_CANDIDATE");
+      assert.equal(app.adapters.devices.commands.length, 0);
+    });
+  }
 });
 
 test("AC-055 没有合法候选动作时明确本轮无执行", async () => {
@@ -173,15 +183,116 @@ test("AC-063 暂停后优化任务不再产生动作", async () => {
   assert.equal((await app.runOptimizationCycle("home-1")).reason, "NO_RUNNING_OPTIMIZATION");
 });
 
-test("AC-064 恢复前重验依赖，失败时保持暂停", async () => {
-  const optimizer = new FakeOptimizerAdapter();
-  const { app, send } = harness({ optimizer });
-  await createOptimization(send);
-  await send("暂停");
-  optimizer.available = false;
-  const result = await send("恢复");
-  assert.equal(result.task.status, "paused");
-  assert.equal(result.error.code, "OPTIMIZER_UNAVAILABLE");
+test("AC-063 优化器 await 期间暂停、停止、替换或版本变化均丢弃候选", async (context) => {
+  async function startDeferredCycle() {
+    const optimizer = new FakeOptimizerAdapter();
+    let release;
+    optimizer.propose = () => new Promise((resolve) => { release = resolve; });
+    const instance = harness({ optimizer });
+    await createOptimization(instance.send);
+    const cycle = instance.app.runOptimizationCycle("home-1");
+    assert.equal(typeof release, "function");
+    return { ...instance, release, cycle };
+  }
+
+  await context.test("pause-and-resume-version-change", async () => {
+    const running = await startDeferredCycle();
+    await running.send("暂停");
+    await running.send("恢复");
+    running.release([{ deviceId: "purifier-living", action: "turn_on" }]);
+    const result = await running.cycle;
+    assert.equal(result.reason, "TASK_CHANGED_DURING_OPTIMIZATION");
+    assert.equal(running.app.adapters.devices.commands.length, 0);
+  });
+
+  await context.test("stop", async () => {
+    const running = await startDeferredCycle();
+    await running.send("停止");
+    running.release([{ deviceId: "purifier-living", action: "turn_on" }]);
+    const result = await running.cycle;
+    assert.equal(result.reason, "TASK_CHANGED_DURING_OPTIMIZATION");
+    assert.equal(running.app.adapters.devices.commands.length, 0);
+  });
+
+  await context.test("replace", async () => {
+    const running = await startDeferredCycle();
+    const replacement = await running.send("现在开始火锅空气守护");
+    await confirm(running.send, replacement.confirmation);
+    const replacementCommandCount = running.app.adapters.devices.commands.length;
+    running.release([{ deviceId: "purifier-living", action: "turn_off" }]);
+    const result = await running.cycle;
+    assert.equal(result.reason, "TASK_CHANGED_DURING_OPTIMIZATION");
+    assert.equal(running.app.adapters.devices.commands.length, replacementCommandCount);
+    assert.equal(running.app.taskService.current("home-1").type, "cooking_guard");
+  });
+});
+
+test("AC-064 恢复按保存规格复核依赖、设备版本、能力和可选窗户", async (context) => {
+  await context.test("optimizer dependency", async () => {
+    const optimizer = new FakeOptimizerAdapter();
+    const { send } = harness({ optimizer });
+    await createOptimization(send);
+    await send("暂停");
+    optimizer.available = false;
+    const result = await send("恢复");
+    assert.equal(result.task.status, "paused");
+    assert.equal(result.error.code, "OPTIMIZER_UNAVAILABLE");
+  });
+
+  await context.test("optimization device state version", async () => {
+    const { app, send } = harness();
+    await createOptimization(send);
+    await send("暂停");
+    app.adapters.registry.updateState("purifier-living", "on");
+    const result = await send("恢复");
+    assert.equal(result.task.status, "paused");
+    assert.equal(result.error.code, "CONFIRMATION_INVALIDATED");
+  });
+
+  await context.test("optimization capability policy", async () => {
+    const { app, send } = harness();
+    await createOptimization(send);
+    await send("暂停");
+    const hood = app.adapters.registry.get("hood-kitchen");
+    app.adapters.registry.replace({ ...hood, availableActions: [] });
+    const result = await send("恢复");
+    assert.equal(result.task.status, "paused");
+    assert.equal(result.error.code, "POLICY_REJECTED");
+  });
+
+  await context.test("optimization fixed policy configuration", async () => {
+    const { app, send } = harness();
+    const created = await createOptimization(send);
+    await send("暂停");
+    app.taskSpecs.get(created.task.taskId).policyConfigHash = "tampered";
+    const result = await send("恢复");
+    assert.equal(result.task.status, "paused");
+    assert.equal(result.error.code, "POLICY_REJECTED");
+  });
+
+  await context.test("cooking optional window constraint", async () => {
+    const { app, send } = harness();
+    const pending = await send("现在开始火锅空气守护并打开窗户");
+    await confirm(send, pending.confirmation);
+    await send("暂停");
+    app.adapters.registry.updateState("window-living", "closed");
+    const result = await send("恢复");
+    assert.equal(result.task.status, "paused");
+    assert.equal(result.error.code, "CONFIRMATION_INVALIDATED");
+  });
+
+  await context.test("cooking fixed action policy", async () => {
+    const { app, send } = harness();
+    const pending = await send("现在开始火锅空气守护");
+    const created = await confirm(send, pending.confirmation);
+    await send("暂停");
+    const specification = app.taskSpecs.get(created.task.taskId);
+    specification.actions[0].action = "turn_off";
+    specification.actions[0].targetState = "off";
+    const result = await send("恢复");
+    assert.equal(result.task.status, "paused");
+    assert.equal(result.error.code, "POLICY_REJECTED");
+  });
 });
 
 test("AC-065 停止任务不宣称反转历史设备动作", async () => {
@@ -215,7 +326,16 @@ test("AC-067 重复暂停、恢复、停止保持幂等状态版本", async () =
   assert.equal(resumedAgain.task.taskVersion, resumed.task.taskVersion);
   const stopped = await send("停止");
   assert.equal(stopped.task.status, "stopped");
+  const stoppedVersion = stopped.task.taskVersion;
+  const transitionEvents = app.adapters.telemetry.events.filter((event) => event.eventName === "task_state_changed").length;
+  const stoppedAgain = await send("停止");
+  assert.equal(stoppedAgain.task.status, "stopped");
+  assert.equal(stoppedAgain.task.taskVersion, stoppedVersion);
+  assert.equal(stoppedAgain.error, undefined);
+  assert.equal(app.adapters.telemetry.events.filter((event) => event.eventName === "task_state_changed").length, transitionEvents);
   assert.equal(app.taskService.current("home-1"), null);
+  const query = await send("当前是什么任务");
+  assert.equal(query.error.code, "TASK_NOT_FOUND");
 });
 
 test("AC-070 AC-071 确认只执行当前待确认计划，无计划不回放", async () => {

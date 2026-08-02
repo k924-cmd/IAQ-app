@@ -57,22 +57,43 @@ test("AC-084 Mock/Replay 不可用时不创建任务也不继续候选动作", a
   assert.equal(app.adapters.devices.commands.length, 0);
 });
 
-test("AC-085 依赖故障不能绕过确认期限、状态版本或策略复核", async () => {
-  const devices = new FakeDeviceAdapter();
-  devices.available = false;
-  const { app, send } = harness({ devices });
-  const pending = await send("打开智能窗户");
-  app.adapters.registry.updateState("window-living", "open");
-  const invalidated = await confirm(send, pending.confirmation);
-  assert.equal(invalidated.error.code, "CONFIRMATION_INVALIDATED");
-  assert.equal(devices.commands.length, 0);
+test("AC-085 依赖故障恢复后仍复核期限、状态版本和策略", async (context) => {
+  await context.test("state version", async () => {
+    const devices = new FakeDeviceAdapter();
+    devices.available = false;
+    const { app, send } = harness({ devices });
+    const pending = await send("打开智能窗户");
+    app.adapters.registry.updateState("window-living", "open");
+    devices.available = true;
+    const invalidated = await confirm(send, pending.confirmation);
+    assert.equal(invalidated.error.code, "CONFIRMATION_INVALIDATED");
+    assert.equal(devices.commands.length, 0);
+  });
 
-  const second = harness({ devices });
-  const expiring = await second.send("打开智能窗户");
-  second.app.adapters.clock.advance(121_000);
-  const expired = await confirm(second.send, expiring.confirmation);
-  assert.equal(expired.error.code, "CONFIRMATION_EXPIRED");
-  assert.equal(devices.commands.length, 0);
+  await context.test("expiry", async () => {
+    const devices = new FakeDeviceAdapter();
+    devices.available = false;
+    const instance = harness({ devices });
+    const pending = await instance.send("打开智能窗户");
+    instance.app.adapters.clock.advance(121_000);
+    devices.available = true;
+    const expired = await confirm(instance.send, pending.confirmation);
+    assert.equal(expired.error.code, "CONFIRMATION_EXPIRED");
+    assert.equal(devices.commands.length, 0);
+  });
+
+  await context.test("policy", async () => {
+    const devices = new FakeDeviceAdapter();
+    devices.available = false;
+    const { app, send } = harness({ devices });
+    const pending = await send("打开智能窗户");
+    const window = app.adapters.registry.get("window-living");
+    app.adapters.registry.replace({ ...window, connectionStatus: "offline" });
+    devices.available = true;
+    const rejected = await confirm(send, pending.confirmation);
+    assert.equal(rejected.error.code, "CONFIRMATION_INVALIDATED");
+    assert.equal(devices.commands.length, 0);
+  });
 });
 
 test("当天调度到期后重新校验并执行固定烹饪动作", async () => {

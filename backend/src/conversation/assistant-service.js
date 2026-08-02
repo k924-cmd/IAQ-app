@@ -86,6 +86,10 @@ export class AssistantService {
       this.#event("dependency_degraded", { taskId: task.taskId, properties: { dependency: "optimizer", errorCode: "OPTIMIZER_UNAVAILABLE" } });
       return { executed: false, reason: "OPTIMIZER_UNAVAILABLE", message: "模拟优化器不可用，本轮未执行动作。", task };
     }
+    const current = this.taskService.current(scopeId);
+    if (!current || current.taskId !== task.taskId || current.taskVersion !== task.taskVersion || current.status !== "running") {
+      return { executed: false, reason: "TASK_CHANGED_DURING_OPTIMIZATION", message: "模拟优化任务状态已变化，本轮候选动作已丢弃，未执行任何设备动作。", task: current };
+    }
     const actions = [];
     for (const item of Array.isArray(candidates) ? candidates : []) {
       const device = this.registry.get(item.deviceId);
@@ -225,8 +229,8 @@ export class AssistantService {
 
   async #chat(request, requestId) {
     try {
-      const content = this.#safeModelText(await this.model.respond({ kind: "chat", message: request.message }), "我可以聊天和回答一般空气知识，但不会在没有可信回执时声称设备动作成功。");
-      return this.#response(request, requestId, "chat", content, [sourceRef("model", this.clock.iso())]);
+      await this.model.respond({ kind: "chat", message: request.message });
+      return this.#response(request, requestId, "chat", "你好，我是 Luna。我可以陪你聊聊，也可以帮助查询空气、设备或管理 V1 任务。设备状态和执行结果只会依据可信状态或回执说明。", [sourceRef("template", this.clock.iso())]);
     } catch {
       this.#event("dependency_degraded", { requestId, conversationId: request.conversationId, properties: { dependency: "model", errorCode: "MODEL_UNAVAILABLE" } });
       return this.#response(request, requestId, "chat", "聊天模型暂时不可用；设备和环境的明确查询、本地确定性控制仍可继续使用。", [sourceRef("template", this.clock.iso())], { error: { code: "MODEL_UNAVAILABLE", message: "聊天模型暂时不可用。", retryable: true, requestId } });
@@ -237,11 +241,12 @@ export class AssistantService {
     if (route.entities.urgent) {
       return this.#response(request, requestId, "knowledge", "请先离开可能的风险环境，到空气安全处，并尽快联系当地紧急服务或专业医疗人员。这里不能替代紧急救助或医疗诊断。", [sourceRef("template", this.clock.iso())]);
     }
-    let content;
+    let content = this.#fixedKnowledgeText(request.message);
     try {
-      content = this.#safeModelText(await this.model.respond({ kind: "knowledge", message: request.message }), "我只能提供一般性空气与设备知识。");
+      await this.model.respond({ kind: "knowledge", message: request.message });
     } catch {
       content = "知识模型暂时不可用。一般建议保持合理通风并按设备说明使用空气设备。";
+      this.#event("dependency_degraded", { requestId, conversationId: request.conversationId, properties: { dependency: "model", errorCode: "MODEL_UNAVAILABLE" } });
     }
     content = `${content} 以上仅为一般性信息，不构成医疗诊断，也不能替代专业医疗建议。`;
     return this.#response(request, requestId, "knowledge", content, [sourceRef("template", this.clock.iso())]);
@@ -345,7 +350,8 @@ export class AssistantService {
     const current = this.taskService.current(transport.scopeId);
     const summary = `${config.label}：${config.goal}；设备范围：空气净化器、智能窗户、抽油烟机；模拟优化；持续至用户停止；来源：${this.optimizer.source === "mock" ? "Mock" : "Replay"}。`;
     const plan = this.#makePlan({ kind: current ? "task_replacement" : "optimization_task", summary, actions: [], requiresConfirmation: true, isSimulation: true, taskVersion: current?.taskVersion ?? 0 });
-    return this.#saveConfirmation(state, request, transport, requestId, plan, { kind: "task", specification: { type: "optimization", mode, executionSource: this.optimizer.source }, replaceTaskId: current?.taskId ?? null });
+    const policyConfigHash = sha256({ weights: config.weights, healthFloor: config.healthFloor, devices: config.devices });
+    return this.#saveConfirmation(state, request, transport, requestId, plan, { kind: "task", specification: { type: "optimization", mode, executionSource: this.optimizer.source, controlledDeviceTypes: [...config.devices], policyConfigHash }, replaceTaskId: current?.taskId ?? null });
   }
 
   #parseSchedule(text, timezone) {
@@ -369,19 +375,23 @@ export class AssistantService {
     if (!task) return this.#response(request, requestId, "task_status", "当前没有活动任务。", [sourceRef("rule", this.clock.iso())], { error: { code: "TASK_NOT_FOUND", message: "当前没有活动任务。", retryable: false, requestId } });
     const simulation = task.type === "optimization" ? "；模拟优化" : "";
     const mode = task.mode ? `；模式：${OPTIMIZATION_MODES[task.mode].label}` : "";
-    return this.#response(request, requestId, "task_status", `当前任务：${task.type}；状态：${task.status}${mode}${simulation}；任务停止不会自动反转历史设备动作。`, [sourceRef("rule", task.updatedAt, task.taskId)], { task });
+    const timing = `；创建时间：${task.createdAt}${task.scheduledFor ? `；计划时间：${task.scheduledFor}` : ""}`;
+    return this.#response(request, requestId, "task_status", `当前任务：${task.type}；状态：${task.status}${mode}${simulation}${timing}；任务停止不会自动反转历史设备动作。`, [sourceRef("rule", task.updatedAt, task.taskId)], { task });
   }
 
   #taskTransition(state, request, transport, requestId, operation) {
-    const current = this.taskService.current(transport.scopeId);
+    const active = this.taskService.current(transport.scopeId);
+    const latestStopped = operation === "stop" ? this.taskService.latest(transport.scopeId) : null;
+    const current = active ?? (latestStopped?.status === "stopped" ? latestStopped : null);
     state.currentTaskId = current?.taskId ?? null;
     if (!current) return this.#response(request, requestId, "task_status", "当前没有活动任务。", [sourceRef("rule", this.clock.iso())], { error: { code: "TASK_NOT_FOUND", message: "当前没有活动任务。", retryable: false, requestId } });
-    if (operation === "resume") {
-      if (current.type === "optimization" && !this.optimizer.available) return this.#response(request, requestId, "task_status", "优化器不可用，任务保持暂停。", [sourceRef("rule", this.clock.iso())], { task: current, error: { code: "OPTIMIZER_UNAVAILABLE", message: "优化器不可用。", retryable: true, requestId } });
-      if (current.type === "cooking_guard" && !this.#cookingDependenciesAvailable()) return this.#response(request, requestId, "task_status", "必要设备不可用，任务保持暂停。", [sourceRef("rule", this.clock.iso())], { task: current, error: { code: "DEVICE_UNAVAILABLE", message: "必要设备不可用。", retryable: true, requestId } });
+    if (operation === "resume" && current.status === "paused") {
+      const validation = this.#validateResume(current);
+      if (!validation.ok) return this.#response(request, requestId, "task_status", `${validation.message}，任务保持暂停。`, [sourceRef("rule", this.clock.iso())], { task: current, error: { code: validation.code, message: validation.message, retryable: validation.retryable, requestId } });
     }
     const result = this.taskService.transition(transport.scopeId, operation);
     if (result.invalid) return this.#response(request, requestId, "task_status", `当前状态 ${result.task.status} 不支持该操作。`, [sourceRef("rule", this.clock.iso())], { task: result.task, error: { code: "INVALID_TASK_TRANSITION", message: "不允许的任务状态迁移。", retryable: false, requestId } });
+    if (result.changed && operation === "pause") this.#captureResumeState(result.task);
     if (result.changed) this.#taskEvent(result.task, result.fromStatus);
     state.currentTaskId = result.task.status === "stopped" ? null : result.task.taskId;
     const labels = { pause: "暂停", resume: "运行", stop: "停止" };
@@ -395,6 +405,77 @@ export class AssistantService {
       const device = this.registry.list().find((item) => item.type === type);
       return device?.connectionStatus === "online" && device.controlSupport === "supported" && device.state !== "unknown";
     });
+  }
+
+  #captureResumeState(task) {
+    const specification = this.taskSpecs.get(task.taskId);
+    if (!specification) return false;
+    const devices = task.type === "cooking_guard"
+      ? specification.actions.map((action) => this.registry.get(action.deviceId)).filter(Boolean)
+      : this.registry.list().filter((device) => specification.controlledDeviceTypes?.includes(device.type));
+    specification.resumeDeviceStateVersions = Object.fromEntries(devices.map((device) => [device.id, device.stateVersion]));
+    return true;
+  }
+
+  #validateResume(task) {
+    const specification = this.taskSpecs.get(task.taskId);
+    if (!specification || specification.type !== task.type || !specification.resumeDeviceStateVersions) {
+      return { ok: false, code: "POLICY_REJECTED", message: "缺少可信的任务恢复规格", retryable: false };
+    }
+    if (task.type === "cooking_guard") return this.#validateCookingResume(specification);
+    if (task.type === "optimization") return this.#validateOptimizationResume(task, specification);
+    return { ok: false, code: "POLICY_REJECTED", message: "任务类型不支持恢复", retryable: false };
+  }
+
+  #validateCookingResume(specification) {
+    const actions = specification.actions ?? [];
+    const types = actions.map((action) => action.deviceType);
+    const fixedTemplate = actions.length >= 2 && actions.length <= 3
+      && types.filter((type) => type === "air_purifier").length === 1
+      && types.filter((type) => type === "range_hood").length === 1
+      && types.filter((type) => type === "smart_window").length <= 1
+      && actions.every((action) => {
+        if (["air_purifier", "range_hood"].includes(action.deviceType)) return action.action === "turn_on" && action.targetState === "on";
+        return action.deviceType === "smart_window" && ((action.action === "open" && action.targetState === "open") || (action.action === "close" && action.targetState === "closed"));
+      });
+    if (!fixedTemplate) return { ok: false, code: "POLICY_REJECTED", message: "烹饪守护规格不符合固定模板", retryable: false };
+    const reboundActions = [];
+    for (const action of actions) {
+      const device = this.registry.get(action.deviceId);
+      const expectedVersion = specification.resumeDeviceStateVersions[action.deviceId];
+      if (!device || expectedVersion === undefined || device.stateVersion !== expectedVersion) return { ok: false, code: "CONFIRMATION_INVALIDATED", message: "设备状态版本已变化", retryable: false };
+      if (device.connectionStatus !== "online" || device.controlSupport !== "supported" || device.state === "unknown") return { ok: false, code: "DEVICE_UNAVAILABLE", message: "烹饪守护依赖设备不可用", retryable: true };
+      if (!device.availableActions.includes(action.action)) return { ok: false, code: "POLICY_REJECTED", message: "设备能力不再满足任务策略", retryable: false };
+      reboundActions.push({ ...action, expectedStateVersion: expectedVersion });
+    }
+    const decision = validatePlannedActions(reboundActions, this.registry);
+    if (decision.outcome !== "allow") return { ok: false, code: "POLICY_REJECTED", message: "烹饪守护策略复核未通过", retryable: false };
+    return { ok: true };
+  }
+
+  #validateOptimizationResume(task, specification) {
+    const config = OPTIMIZATION_MODES[task.mode];
+    const configuredTypes = [...(specification.controlledDeviceTypes ?? [])].sort();
+    const expectedPolicyHash = config ? sha256({ weights: config.weights, healthFloor: config.healthFloor, devices: config.devices }) : null;
+    if (!config || !task.isSimulation || !["mock", "replay"].includes(task.executionSource)
+      || specification.executionSource !== task.executionSource || this.optimizer.source !== task.executionSource
+      || specification.policyConfigHash !== expectedPolicyHash
+      || JSON.stringify(configuredTypes) !== JSON.stringify([...config.devices].sort())) {
+      return { ok: false, code: "POLICY_REJECTED", message: "模拟优化规格或固定策略不匹配", retryable: false };
+    }
+    if (!this.optimizer.available) return { ok: false, code: "OPTIMIZER_UNAVAILABLE", message: "优化器不可用", retryable: true };
+    const devices = this.registry.list().filter((device) => configuredTypes.includes(device.type));
+    const expectedIds = Object.keys(specification.resumeDeviceStateVersions).sort();
+    if (!devices.length || JSON.stringify(devices.map((device) => device.id).sort()) !== JSON.stringify(expectedIds)) {
+      return { ok: false, code: "POLICY_REJECTED", message: "模拟优化可控设备集合已变化", retryable: false };
+    }
+    for (const device of devices) {
+      if (device.stateVersion !== specification.resumeDeviceStateVersions[device.id]) return { ok: false, code: "CONFIRMATION_INVALIDATED", message: "模拟优化设备状态版本已变化", retryable: false };
+      if (device.connectionStatus !== "online" || device.controlSupport !== "supported" || device.state === "unknown") return { ok: false, code: "DEVICE_UNAVAILABLE", message: "模拟优化可控设备不可用", retryable: true };
+      const requiredActions = device.type === "smart_window" ? ["open", "close"] : ["turn_on", "turn_off"];
+      if (!requiredActions.every((action) => device.availableActions.includes(action))) return { ok: false, code: "POLICY_REJECTED", message: "模拟优化设备能力不符合固定策略", retryable: false };
+    }
+    return { ok: true };
   }
 
   #plannedAction(device, action, targetState) {
@@ -578,10 +659,11 @@ export class AssistantService {
     if (state.messages.length > 12) state.messages.splice(0, state.messages.length - 12);
   }
 
-  #safeModelText(value, fallback) {
-    const text = typeof value === "string" ? value.trim() : "";
-    if (!text || /已开启|已关闭|已打开|执行成功|诊断为|你患有|保证.*安全/.test(text)) return fallback;
-    return [...text].slice(0, 12_000).join("");
+  #fixedKnowledgeText(message) {
+    if (/通风/.test(message)) return "一般情况下，合理通风有助于稀释室内污染物；是否适合开窗还应结合室外环境和安全条件判断。";
+    if (/湿度/.test(message)) return "一般可关注室内相对湿度和体感，避免长期过干或过湿，并按设备说明进行调节。";
+    if (/PM2\.5|颗粒物/i.test(message)) return "PM2.5 是空气中的细颗粒物指标之一；了解当前数值时应使用带观测时间和来源的可信快照。";
+    return "我可以提供一般性的空气质量与设备使用知识，但不会据此推断当前设备状态、执行结果或个人疾病。";
   }
 
   #event(eventName, partial) {

@@ -4,6 +4,7 @@ const QUESTION_WORDS = /状态|怎么样|是否|在线|接入|可用|开着|关�
 const URGENT_WORDS = /呼吸困难|胸痛|昏厥|中毒|煤气|一氧化碳|严重不适|喘不过气/;
 
 export const INTENTS = new Set(["chat", "knowledge_query", "environment_query", "device_query", "device_control", "cooking_guard_create", "optimization_create", "task_query", "task_pause", "task_resume", "task_stop", "confirm", "cancel", "unknown"]);
+const MODEL_FORBIDDEN_STATE_MUTATIONS = new Set(["confirm", "cancel", "task_pause", "task_resume", "task_stop"]);
 
 function deviceMentions(text) {
   return [...new Set(DEVICE_WORDS.filter((word) => text.includes(word)))];
@@ -66,7 +67,30 @@ export function validateSemanticCandidate(value, evidence) {
   if (!value.entities || typeof value.entities !== "object" || Array.isArray(value.entities)) return null;
   if (typeof value.evidence !== "string" || value.evidence.length > 4000 || value.source !== "model") return null;
   if (typeof value.confidence !== "number" || value.confidence < 0 || value.confidence > 1) return null;
-  return { intent: value.intent, entities: value.entities, evidence: evidence.slice(0, 4000), source: "model", confidence: value.confidence };
+  const intent = MODEL_FORBIDDEN_STATE_MUTATIONS.has(value.intent) ? "unknown" : value.intent;
+  return { intent, entities: entitiesFromUserText(intent, evidence), evidence: evidence.slice(0, 4000), source: "model", confidence: value.confidence };
+}
+
+function entitiesFromUserText(intent, rawText) {
+  const text = rawText.trim();
+  const mentions = deviceMentions(text);
+  const usesReference = /它|这个设备/.test(text);
+  switch (intent) {
+    case "knowledge_query":
+      return { urgent: URGENT_WORDS.test(text) };
+    case "environment_query":
+      return { metrics: metricList(text) };
+    case "device_query":
+      return { mentions, usesReference };
+    case "device_control":
+      return { mentions, usesReference, requestedState: requestedAction(text), multipleRequested: distinctDeviceFamilies(mentions) > 1 };
+    case "cooking_guard_create":
+      return { includeWindow: /开窗|打开.*窗/.test(text), closeWindow: /关窗|关闭.*窗/.test(text), timeText: text };
+    case "optimization_create":
+      return { mode: optimizationMode(text) };
+    default:
+      return {};
+  }
 }
 
 function candidate(intent, entities, evidence) {
