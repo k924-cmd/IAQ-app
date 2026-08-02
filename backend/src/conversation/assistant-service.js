@@ -13,6 +13,7 @@ import {
 } from "../core/utils.js";
 import { actionTarget } from "../devices/registry.js";
 import { localRoute, validateSemanticCandidate } from "./router.js";
+import { lookupKnowledge } from "./knowledge-base.js";
 import { decideSingleDevice, validatePlannedActions } from "../policies/policy.js";
 import { OPTIMIZATION_MODES } from "../adapters/fakes.js";
 import { TaskService } from "../tasks/task-service.js";
@@ -102,8 +103,17 @@ export class AssistantService {
     }
     if (!actions.length) return { executed: false, reason: "NO_LEGAL_CANDIDATE", message: "模拟优化本轮没有合法候选动作，未执行任何设备动作。", task, source: this.optimizer.source };
     const plan = this.#makePlan({ kind: "optimization_task", summary: `模拟优化 ${OPTIMIZATION_MODES[task.mode].label} 本轮候选动作`, actions, requiresConfirmation: false, isSimulation: true });
-    const receipt = await this.#executeActions(actions, this.ids.next("cycle-request"), plan.planId, this.ids.next("cycle-key"));
-    return { executed: true, message: "模拟优化候选动作已经过策略裁决，结果以可信回执为准。", task, receipt, source: this.optimizer.source };
+    const receipt = await this.#executeActions(actions, this.ids.next("cycle-request"), plan.planId, this.ids.next("cycle-key"), {
+      scopeId,
+      taskId: task.taskId,
+      taskVersion: task.taskVersion,
+    });
+    const interrupted = receipt.actions.some((action) => action.errorCode === "TASK_CHANGED_DURING_EXECUTION");
+    const sentCount = receipt.actions.filter((action) => action.errorCode !== "TASK_CHANGED_DURING_EXECUTION").length;
+    const message = interrupted
+      ? `模拟优化任务状态在执行期间发生变化，剩余动作已中止；回执状态：${receipt.status}。`
+      : "模拟优化候选动作已经过策略裁决，结果以可信回执为准。";
+    return { executed: sentCount > 0, interrupted, message, task: this.taskService.current(scopeId), receipt, source: this.optimizer.source };
   }
 
   endConversation(conversationId) {
@@ -241,15 +251,9 @@ export class AssistantService {
     if (route.entities.urgent) {
       return this.#response(request, requestId, "knowledge", "请先离开可能的风险环境，到空气安全处，并尽快联系当地紧急服务或专业医疗人员。这里不能替代紧急救助或医疗诊断。", [sourceRef("template", this.clock.iso())]);
     }
-    let content = this.#fixedKnowledgeText(request.message);
-    try {
-      await this.model.respond({ kind: "knowledge", message: request.message });
-    } catch {
-      content = "知识模型暂时不可用。一般建议保持合理通风并按设备说明使用空气设备。";
-      this.#event("dependency_degraded", { requestId, conversationId: request.conversationId, properties: { dependency: "model", errorCode: "MODEL_UNAVAILABLE" } });
-    }
-    content = `${content} 以上仅为一般性信息，不构成医疗诊断，也不能替代专业医疗建议。`;
-    return this.#response(request, requestId, "knowledge", content, [sourceRef("template", this.clock.iso())]);
+    const knowledge = lookupKnowledge(request.message);
+    const content = `${knowledge.content} 以上仅为一般性信息，不构成医疗诊断，也不能替代专业医疗建议。`;
+    return this.#response(request, requestId, "knowledge", content, [sourceRef("template", this.clock.iso(), `knowledge-${knowledge.topic}-v1`)]);
   }
 
   async #environment(request, requestId, route) {
@@ -569,10 +573,18 @@ export class AssistantService {
     return this.#response(request, requestId, "task_status", `${simulation}任务已创建，状态：${created.task.status}。任务创建不代表设备动作已经成功。`, [sourceRef("rule", created.task.updatedAt, created.task.taskId)], { task: created.task });
   }
 
-  async #executeActions(actions, requestId, planId, baseIdempotencyKey) {
+  async #executeActions(actions, requestId, planId, baseIdempotencyKey, taskGuard = null) {
     const startedAt = this.clock.iso();
     const results = [];
-    for (const item of actions) {
+    for (let index = 0; index < actions.length; index += 1) {
+      const item = actions[index];
+      if (taskGuard && !this.#taskGuardAllowsExecution(taskGuard)) {
+        for (const unsent of actions.slice(index)) {
+          const currentDevice = this.registry.get(unsent.deviceId);
+          results.push({ actionId: unsent.actionId, deviceId: unsent.deviceId, requestedAction: unsent.action, actualState: currentDevice?.state ?? "unknown", status: "failed", errorCode: "TASK_CHANGED_DURING_EXECUTION", source: "mock" });
+        }
+        break;
+      }
       const device = this.registry.get(item.deviceId);
       if (!device || device.stateVersion !== item.expectedStateVersion) {
         results.push({ actionId: item.actionId, deviceId: item.deviceId, requestedAction: item.action, actualState: device?.state ?? "unknown", status: "failed", errorCode: "CONFIRMATION_INVALIDATED", source: "mock" });
@@ -601,6 +613,11 @@ export class AssistantService {
     else if (statuses.some((item) => item === "unknown")) status = "unknown";
     else status = "failed";
     return { receiptId: this.ids.next("receipt"), requestId, planId, status, actions: results, source: "mock", startedAt, completedAt: this.clock.iso() };
+  }
+
+  #taskGuardAllowsExecution(guard) {
+    const current = this.taskService.current(guard.scopeId);
+    return current?.taskId === guard.taskId && current.taskVersion === guard.taskVersion && current.status === "running";
   }
 
   #executionResponse(request, requestId, receipt, task) {
@@ -657,13 +674,6 @@ export class AssistantService {
   #rememberMessage(state, role, content) {
     state.messages.push({ role, content });
     if (state.messages.length > 12) state.messages.splice(0, state.messages.length - 12);
-  }
-
-  #fixedKnowledgeText(message) {
-    if (/通风/.test(message)) return "一般情况下，合理通风有助于稀释室内污染物；是否适合开窗还应结合室外环境和安全条件判断。";
-    if (/湿度/.test(message)) return "一般可关注室内相对湿度和体感，避免长期过干或过湿，并按设备说明进行调节。";
-    if (/PM2\.5|颗粒物/i.test(message)) return "PM2.5 是空气中的细颗粒物指标之一；了解当前数值时应使用带观测时间和来源的可信快照。";
-    return "我可以提供一般性的空气质量与设备使用知识，但不会据此推断当前设备状态、执行结果或个人疾病。";
   }
 
   #event(eventName, partial) {

@@ -8,6 +8,7 @@ import {
   ManualClock,
 } from "../src/index.js";
 import { confirm, harness, transport } from "./helpers.js";
+import { lookupKnowledge } from "../src/conversation/knowledge-base.js";
 
 test("AC-000 输入错误不调用模型或执行器", async () => {
   const model = new FakeModelAdapter();
@@ -171,6 +172,42 @@ test("AC-011 AC-012 知识回复保留医疗边界，危险暴露优先安全引
   assert.equal(knowledge.sources[0].type, "template");
   assert.doesNotMatch(knowledge.message.content, /这是一般空气知识/);
   assert.match((await send("我呼吸困难并且胸痛")).message.content, /离开.*风险环境.*紧急服务|紧急服务.*专业医疗/);
+});
+
+test("固定知识库覆盖空气、V1 设备、模拟优化并安全处理未知主题", async () => {
+  const coveredTopics = [
+    ["PM2.5 是什么", "pm25"],
+    ["二氧化碳为什么会升高", "co2"],
+    ["湿度是什么", "humidity"],
+    ["温度为什么变化", "temperature"],
+    ["通风有什么用", "ventilation"],
+    ["空气净化器如何工作", "air_purifier"],
+    ["智能窗户有什么用", "smart_window"],
+    ["抽油烟机如何工作", "range_hood"],
+    ["Mock Replay 模拟优化是什么", "simulation_optimization"],
+    ["空气安全知识", "general_safety"],
+  ];
+  for (const [question, topic] of coveredTopics) assert.equal(lookupKnowledge(question).topic, topic);
+
+  const maliciousModel = new FakeModelAdapter({ responder: () => "替你处理好了，设备现在开启" });
+  const { send } = harness({ model: maliciousModel });
+  const co2 = await send("二氧化碳为什么会升高");
+  assert.match(co2.message.content, /人员呼吸.*燃烧.*通风不足/);
+  assert.equal(co2.sources[0].referenceId, "knowledge-co2-v1");
+  assert.equal(co2.receipt, undefined);
+
+  for (const question of ["空气净化器如何工作", "智能窗户有什么用", "抽油烟机如何工作"]) {
+    const response = await send(question);
+    assert.equal(response.responseType, "knowledge");
+    assert.match(response.message.content, /知识说明|滤材|设备说明|用户确认/);
+    assert.equal(response.receipt, undefined);
+    assert.doesNotMatch(response.message.content, /处理好了|设备现在开启/);
+  }
+
+  const unknown = await send("臭氧是什么");
+  assert.match(unknown.message.content, /暂未覆盖.*PM2\.5.*二氧化碳/);
+  assert.equal(unknown.sources[0].referenceId, "knowledge-unknown-v1");
+  assert.equal(maliciousModel.responseCalls, 0);
 });
 
 test("AC-013 聊天模型不可用时明确降级", async () => {

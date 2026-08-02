@@ -37,12 +37,14 @@ export function localRoute(rawText) {
     return candidate("unknown", { unsupported: true }, text);
   }
 
+  if (/(Mock|Replay|模拟优化)/i.test(text) && /(什么|原理|区别|如何|介绍|知识)/.test(text)) return candidate("knowledge_query", { urgent: false }, text);
   if (/优化/.test(text)) return candidate("optimization_create", { mode: optimizationMode(text) }, text);
   if (/火锅|烹饪|做饭/.test(text) && /(守护|开始|启动|定时)/.test(text)) {
     return candidate("cooking_guard_create", { includeWindow: /开窗|打开.*窗/.test(text), closeWindow: /关窗|关闭.*窗/.test(text), timeText: text }, text);
   }
 
   const mentions = deviceMentions(text);
+  if (mentions.length && /(为什么|原理|怎么工作|如何工作|有什么用|介绍|知识)/.test(text)) return candidate("knowledge_query", { urgent: false }, text);
   if (!mentions.length && /现在.*(空气|PM2\.5|PM25|二氧化碳|CO2|湿度|温度|评分)|空气.*怎么样|当前.*环境/i.test(text)) {
     return candidate("environment_query", { metrics: metricList(text) }, text);
   }
@@ -57,7 +59,8 @@ export function localRoute(rawText) {
   if (CONTROL_WORDS.test(text)) return candidate("device_control", { mentions: [], usesReference: false, requestedState: requestedAction(text) }, text);
 
   if (URGENT_WORDS.test(text)) return candidate("knowledge_query", { urgent: true }, text);
-  if (/空气|通风|PM2\.5|二氧化碳|湿度|净化|健康|医疗|诊断/i.test(text)) return candidate("knowledge_query", { urgent: false }, text);
+  if (/空气|通风|PM2\.5|二氧化碳|CO2|湿度|温度|净化|健康|医疗|诊断/i.test(text)) return candidate("knowledge_query", { urgent: false }, text);
+  if (/(是什么|为什么|原理|怎么工作|如何工作|有什么用|介绍一下|知识)/.test(text)) return candidate("knowledge_query", { urgent: false }, text);
   if (/^(你好|您好|嗨|hi|hello|早上好|晚上好)/i.test(text)) return candidate("chat", {}, text);
   return null;
 }

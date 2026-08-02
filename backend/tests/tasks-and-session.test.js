@@ -227,6 +227,43 @@ test("AC-063 优化器 await 期间暂停、停止、替换或版本变化均丢
   });
 });
 
+test("AC-063 第一个设备 await 期间暂停后不发送后续优化动作", async () => {
+  class DeferredFirstDeviceAdapter extends FakeDeviceAdapter {
+    async execute(command, device, targetState) {
+      this.commands.push(structuredClone(command));
+      if (this.commands.length === 1) {
+        return new Promise((resolve) => {
+          this.releaseFirst = () => resolve({ status: "succeeded", actualState: targetState, source: "mock" });
+        });
+      }
+      return { status: "succeeded", actualState: targetState, source: "mock" };
+    }
+  }
+
+  const devices = new DeferredFirstDeviceAdapter();
+  const optimizer = new FakeOptimizerAdapter({ candidates: [
+    { deviceId: "purifier-living", action: "turn_on" },
+    { deviceId: "hood-kitchen", action: "turn_on" },
+  ] });
+  const { app, send } = harness({ devices, optimizer });
+  await createOptimization(send);
+  const cyclePromise = app.runOptimizationCycle("home-1");
+  for (let index = 0; index < 5 && devices.commands.length === 0; index += 1) await Promise.resolve();
+  assert.equal(devices.commands.length, 1);
+  const paused = await send("暂停");
+  assert.equal(paused.task.status, "paused");
+  assert.equal(devices.commands.length, 1);
+  devices.releaseFirst();
+  const cycle = await cyclePromise;
+  assert.equal(devices.commands.length, 1);
+  assert.equal(cycle.interrupted, true);
+  assert.equal(cycle.receipt.status, "partial_success");
+  assert.equal(cycle.receipt.actions[0].status, "succeeded");
+  assert.equal(cycle.receipt.actions[1].status, "failed");
+  assert.equal(cycle.receipt.actions[1].errorCode, "TASK_CHANGED_DURING_EXECUTION");
+  assert.match(cycle.message, /剩余动作已中止.*partial_success/);
+});
+
 test("AC-064 恢复按保存规格复核依赖、设备版本、能力和可选窗户", async (context) => {
   await context.test("optimizer dependency", async () => {
     const optimizer = new FakeOptimizerAdapter();
