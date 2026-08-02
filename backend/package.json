@@ -1,0 +1,14 @@
+{
+  "name": "breath-forest-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/demo.js",
+    "test": "node --test",
+    "test:ac": "node --test --test-name-pattern=AC-"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

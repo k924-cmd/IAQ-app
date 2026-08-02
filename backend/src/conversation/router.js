@@ -1,0 +1,95 @@
+const DEVICE_WORDS = ["空气净化器", "净化器", "智能窗户", "窗户", "抽油烟机", "油烟机", "新风系统", "新风", "加湿器", "循环风机", "循环扇"];
+const CONTROL_WORDS = /打开|开启|启动|关掉|关闭|开窗|关窗|控制/;
+const QUESTION_WORDS = /状态|怎么样|是否|在线|接入|可用|开着|关着/;
+const URGENT_WORDS = /呼吸困难|胸痛|昏厥|中毒|煤气|一氧化碳|严重不适|喘不过气/;
+
+export const INTENTS = new Set(["chat", "knowledge_query", "environment_query", "device_query", "device_control", "cooking_guard_create", "optimization_create", "task_query", "task_pause", "task_resume", "task_stop", "confirm", "cancel", "unknown"]);
+
+function deviceMentions(text) {
+  return [...new Set(DEVICE_WORDS.filter((word) => text.includes(word)))];
+}
+
+function requestedAction(text) {
+  if (/关闭|关掉|关窗/.test(text)) return "off";
+  if (/打开|开启|启动|开窗/.test(text)) return "on";
+  return null;
+}
+
+function optimizationMode(text) {
+  if (/舒适/.test(text)) return "comfort";
+  if (/均衡/.test(text)) return "balanced";
+  if (/低碳|节能/.test(text)) return "eco";
+  return null;
+}
+
+export function localRoute(rawText) {
+  const text = rawText.trim();
+  if (/^(确认|确定|好的|执行)$/.test(text)) return candidate("confirm", {}, text);
+  if (/^(取消|不用了|算了)$/.test(text)) return candidate("cancel", {}, text);
+  if (/上次.*(方案|任务)|三天前|之前那个方案/.test(text)) return candidate("unknown", { historicalReference: true }, text);
+  if (/^(暂停|暂停任务|先停一下)$/.test(text)) return candidate("task_pause", {}, text);
+  if (/^(继续|恢复|恢复任务)$/.test(text)) return candidate("task_resume", {}, text);
+  if (/^(停止|停止任务|结束任务)$/.test(text)) return candidate("task_stop", {}, text);
+  if (/当前.*(任务|模式)|任务.*状态|什么模式/.test(text)) return candidate("task_query", {}, text);
+
+  if (/真实\s*(DQN|模型)|live_model|自定义.*权重|真实.*(节能|收益)|绕过.*(安全|策略|确认)|真实\s*MQTT/i.test(text)) {
+    return candidate("unknown", { unsupported: true }, text);
+  }
+
+  if (/优化/.test(text)) return candidate("optimization_create", { mode: optimizationMode(text) }, text);
+  if (/火锅|烹饪|做饭/.test(text) && /(守护|开始|启动|定时)/.test(text)) {
+    return candidate("cooking_guard_create", { includeWindow: /开窗|打开.*窗/.test(text), closeWindow: /关窗|关闭.*窗/.test(text), timeText: text }, text);
+  }
+
+  const mentions = deviceMentions(text);
+  if (!mentions.length && /现在.*(空气|PM2\.5|PM25|二氧化碳|CO2|湿度|温度|评分)|空气.*怎么样|当前.*环境/i.test(text)) {
+    return candidate("environment_query", { metrics: metricList(text) }, text);
+  }
+
+  const usesReference = /它|这个设备/.test(text);
+  if ((mentions.length || usesReference) && CONTROL_WORDS.test(text)) {
+    return candidate("device_control", { mentions, usesReference, requestedState: requestedAction(text), multipleRequested: distinctDeviceFamilies(mentions) > 1 }, text);
+  }
+  if (mentions.length || (usesReference && QUESTION_WORDS.test(text))) {
+    return candidate("device_query", { mentions, usesReference }, text);
+  }
+  if (CONTROL_WORDS.test(text)) return candidate("device_control", { mentions: [], usesReference: false, requestedState: requestedAction(text) }, text);
+
+  if (URGENT_WORDS.test(text)) return candidate("knowledge_query", { urgent: true }, text);
+  if (/空气|通风|PM2\.5|二氧化碳|湿度|净化|健康|医疗|诊断/i.test(text)) return candidate("knowledge_query", { urgent: false }, text);
+  if (/^(你好|您好|嗨|hi|hello|早上好|晚上好)/i.test(text)) return candidate("chat", {}, text);
+  return null;
+}
+
+export function validateSemanticCandidate(value, evidence) {
+  if (!value || typeof value !== "object" || !INTENTS.has(value.intent)) return null;
+  if (!value.entities || typeof value.entities !== "object" || Array.isArray(value.entities)) return null;
+  if (typeof value.evidence !== "string" || value.evidence.length > 4000 || value.source !== "model") return null;
+  if (typeof value.confidence !== "number" || value.confidence < 0 || value.confidence > 1) return null;
+  return { intent: value.intent, entities: value.entities, evidence: evidence.slice(0, 4000), source: "model", confidence: value.confidence };
+}
+
+function candidate(intent, entities, evidence) {
+  return { intent, entities, evidence, source: "rule", confidence: 1 };
+}
+
+function metricList(text) {
+  const metrics = [];
+  if (/PM2\.5|PM25/i.test(text)) metrics.push("pm25");
+  if (/CO2|二氧化碳/i.test(text)) metrics.push("co2");
+  if (/湿度/.test(text)) metrics.push("humidity");
+  if (/温度/.test(text)) metrics.push("temperature");
+  if (/评分/.test(text)) metrics.push("score");
+  return metrics;
+}
+
+function distinctDeviceFamilies(mentions) {
+  const families = new Set();
+  for (const mention of mentions) {
+    if (/净化器/.test(mention)) families.add("purifier");
+    else if (/窗/.test(mention)) families.add("window");
+    else if (/油烟机/.test(mention)) families.add("hood");
+    else families.add(mention);
+  }
+  return families.size;
+}
