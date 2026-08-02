@@ -5,7 +5,8 @@
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/SendMessageRequest" },
-    { "$ref": "#/$defs/SendMessageResponse" }
+    { "$ref": "#/$defs/SendMessageResponse" },
+    { "$ref": "#/$defs/BootstrapResponse" }
   ],
   "$defs": {
     "Identifier": {
@@ -339,6 +340,32 @@
         "conversationId": { "$ref": "#/$defs/Identifier" },
         "taskId": { "$ref": "#/$defs/Identifier" },
         "properties": { "type": "object" }
+      }
+    },
+    "BootstrapResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "mode", "devices", "environment", "activeTask", "observedAt"],
+      "properties": {
+        "contractVersion": { "const": "1.0.0" },
+        "mode": { "const": "local_mock" },
+        "devices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Device" }
+        },
+        "environment": {
+          "oneOf": [
+            { "$ref": "#/$defs/EnvironmentSnapshot" },
+            { "type": "null" }
+          ]
+        },
+        "activeTask": {
+          "oneOf": [
+            { "$ref": "#/$defs/AutomationTask" },
+            { "type": "null" }
+          ]
+        },
+        "observedAt": { "$ref": "#/$defs/Timestamp" }
       }
     },
     "SendMessageResponse": {

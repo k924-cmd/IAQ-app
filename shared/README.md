@@ -8,6 +8,7 @@
 - 状态：`accepted`
 - 产品输入：`product/PRD.md`、`product/USER_FLOWS.md`、`product/ACCEPTANCE_CRITERIA.md`
 - 机器可读入口：`contracts/ai-assistant-v1.schema.json`
+- 本地 HTTP 传输：`contracts/http.md`
 
 ## 兼容规则
 
