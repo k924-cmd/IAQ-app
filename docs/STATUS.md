@@ -6,7 +6,7 @@
 ## 基线快照
 
 - 最后更新：2026-08-03（Asia/Shanghai）
-- 主线 HEAD：`c7f0dde`（`docs: close local assistant v1 integration`）
+- 主线 HEAD：`321e761`（`docs: add four-line coordination status snapshot`）
 - 远端同步：已推送 `origin/main`，本地与远端一致
 - 工作树：干净
 
