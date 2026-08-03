@@ -6,9 +6,9 @@
 ## 基线快照
 
 - 最后更新：2026-08-04（Asia/Shanghai）
-- 主线 HEAD：`b53e383`（`docs(operations): review DEP-003/004/005 operations impact`）
-- 说明：`3bc91a3`（`docs: sync status baseline with closed DEP-003/004/005`）为运营交付物并入前基线；运营复核提交 `d0ee55f` 已并入 main 为 `b53e383`。
-- 远端同步：本地领先 `origin/main` 1 个提交（`b53e383`），推送后一致
+- 主线 HEAD：`a3a7011`（`docs: mark presentation append naming issue resolved`）
+- 说明：`3bc91a3`（`docs: sync status baseline with closed DEP-003/004/005`）为 DEP-003/004/005 关闭基线；其后的运营交付物并入（`b53e383`）、产品编号修正（`8339603`）与验收记录更新（`a3a7011`）均已并入 main。
+- 远端同步：本地与 `origin/main` 一致（已推送）
 - 工作树：干净
 
 ## 当前目标（已关闭）
@@ -40,7 +40,7 @@
 - 已并入 `d0ee55f`（`docs(operations): review DEP-003/004/005 operations impact`）至 main 为 `b53e383`。
 - 内容：`operations/content/UI_COPY.md` 第 7 节（免责文案库与回执中文映射）；`operations/release/RELEASE_CHECKLIST.md` 第 8 节（窗户免确认与呈现披露检查）；`operations/release/INTEGRATION_ACCEPTANCE_V1.md` 追加运营复核记录。
 - 合并冲突处理：与 main 已存在的“人工回归验收记录”叠加，两段均保留。
-- 待协调确认（运营提出）：`D-2026-08-04-DEP-003-PRESENTATION-APPEND.md` 文件名标注为对 DEP-003 追加，但其内容（回执中文化、观测时间可读化）对应 DEP-005 呈现口径子项，建议核对编号一致性。
+- 产品决策编号修正已并入（`8339603`）：`product/decisions/D-2026-08-04-DEP-005-PRESENTATION-APPEND.md`，标题与说明明确对应 DEP-005 呈现口径子项；验收记录「待协调确认」项已标记处理（`a3a7011`）。
 
 ## Worktree 说明
 
