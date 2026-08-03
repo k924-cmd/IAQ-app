@@ -6,8 +6,8 @@
 ## 基线快照
 
 - 最后更新：2026-08-04（Asia/Shanghai）
-- 主线 HEAD：`8d4af96`（`fix(backend): isolate deepseek .env test from local config`）
-- 远端同步：`main` 领先远端 6 个提交，待推送
+- 主线 HEAD：`bc86d50`（`docs: close DEP-003/004/005 after acceptance`）
+- 远端同步：已推送 `origin/main`，本地与远端一致
 - 工作树：干净
 
 ## 当前目标（已关闭）
@@ -20,6 +20,10 @@
   - 变更请求：`DEP-2026-08-03-002` → `closed`（见 `shared/CHANGE_REQUESTS.md`）
   - 验收记录：`operations/release/INTEGRATION_ACCEPTANCE_V1.md`（追加“真实模型 API 接入验收记录”）
   - 真实调用验证：`demo:model` 返回 `sources[0].type="model"`；测试后端 103/103、前端 14/14
+- AI 小助手 V1 免责统一、窗户免确认与对话缺陷修复：已完成并关闭。
+  - 变更请求：`DEP-2026-08-03-003`（免责/E3/E4）、`DEP-2026-08-03-004`（窗户免确认）、`DEP-2026-08-03-005`（缺陷修复）→ 均 `closed`（见 `shared/CHANGE_REQUESTS.md`）
+  - 验收记录：`operations/release/INTEGRATION_ACCEPTANCE_V1.md`（追加“人工回归验收记录 2026-08-04”）
+  - 验收结论：后端 115/115、前端 25/25；API 回归覆盖 AC-013/015/019/023/E3/E4；前端呈现覆盖免责样式、时间可读化、增量渲染、回执中文化、窗户免确认、澄清链路，全部通过
 
 ## 四线状态
 
@@ -29,12 +33,6 @@
 | 后端 | `codex/backend-core` | `C:\Users\Administrator\.codex\worktrees\43a5\codex_IAQapp` | DEP-003 免责/E3/E4、窗户免确认、DEP-005 缺陷修复 | 115/115 |
 | 产品 | `codex/product-spec` | `C:\Users\Administrator\.codex\worktrees\db02\codex_IAQapp` | DEP-003/004 定稿、呈现口径追加、AC 修订 | 无独立测试 |
 | 运营 | `codex/operations` | `C:\Users\Administrator\.codex\worktrees\4047\codex_IAQapp` | 事件口径、发布检查、V1 验收记录（复核已并入） | 无独立测试 |
-
-## 当前变更（待终验）
-
-- `DEP-2026-08-03-003` 免责声明统一口径与展示边界（含 E3/E4）：`accepted`，待人工回归终验。
-- `DEP-2026-08-03-004` 智能窗户免确认直接执行：`accepted`，待人工回归终验。
-- `DEP-2026-08-03-005` V1 已定义行为缺陷修复：`accepted`，待人工回归终验。
 
 ## 共享契约（`shared/**`，协调窗口维护）
 
