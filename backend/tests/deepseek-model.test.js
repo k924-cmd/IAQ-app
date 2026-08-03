@@ -13,7 +13,9 @@ function okFetch(content) {
 }
 
 function makeAdapter(fetchImpl, options = {}) {
-  return new DeepSeekModelAdapter({ apiKey: "test-key", enabled: true, fetchImpl, ...options });
+  // Explicit endpoint/model shield these assertions from any real backend/.env
+  // values that may exist on the machine running the tests.
+  return new DeepSeekModelAdapter({ apiKey: "test-key", enabled: true, endpoint: "https://api.deepseek.com", model: "deepseek-chat", fetchImpl, ...options });
 }
 
 test("DeepSeek 适配器请求结构符合端点、模型、限额与密钥约束", async () => {
@@ -193,7 +195,11 @@ test("本地 .env 仅加载 DEEPSEEK_* 且不覆盖已有环境变量", () => {
   const dir = mkdtempSync(join(tmpdir(), "breath-forest-env-"));
   const file = join(dir, ".env");
   writeFileSync(file, "# comment\nDEEPSEEK_MODEL=env-model\nDEEPSEEK_API_KEY=env-key\nOTHER=no\nDEEPSEEK_TIMEOUT_MS=3000\n", "utf8");
-  const previous = process.env.DEEPSEEK_TIMEOUT_MS;
+  const keys = ["DEEPSEEK_MODEL", "DEEPSEEK_API_KEY", "DEEPSEEK_ENDPOINT", "DEEPSEEK_ENABLED", "DEEPSEEK_MAX_TOKENS", "DEEPSEEK_TIMEOUT_MS"];
+  const previous = new Map(keys.filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]]));
+  for (const key of keys) delete process.env[key];
+  // Pre-set the timeout on purpose: existing environment values must never be
+  // overwritten by the local .env loader (loadDotEnvIfPresent semantics).
   process.env.DEEPSEEK_TIMEOUT_MS = "15000";
   try {
     loadDotEnvIfPresent(file);
@@ -202,10 +208,10 @@ test("本地 .env 仅加载 DEEPSEEK_* 且不覆盖已有环境变量", () => {
     assert.equal(process.env.DEEPSEEK_TIMEOUT_MS, "15000");
     assert.equal(process.env.OTHER, undefined);
   } finally {
-    delete process.env.DEEPSEEK_MODEL;
-    delete process.env.DEEPSEEK_API_KEY;
-    if (previous === undefined) delete process.env.DEEPSEEK_TIMEOUT_MS;
-    else process.env.DEEPSEEK_TIMEOUT_MS = previous;
+    for (const key of keys) {
+      if (previous.has(key)) process.env[key] = previous.get(key);
+      else delete process.env[key];
+    }
     rmSync(dir, { recursive: true, force: true });
   }
 });
