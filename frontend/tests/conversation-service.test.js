@@ -102,3 +102,77 @@ test('API 不可用时明确降级为本地 UI Mock', async () => {
   assert.match(response.message.content, /本地 UI Mock \/ 未连接后端/);
   assert.equal(response.sources[0].type, 'mock');
 });
+
+test('model 来源响应原样保留 content/responseType/sources', async () => {
+  let posted;
+  const fetchImpl = async (url, init) => {
+    posted = { body: JSON.parse(init.body) };
+    return jsonResponse({
+      contractVersion: '1.0.0',
+      requestId: 'request-model',
+      conversationId: posted.body.conversationId,
+      message: {
+        id: 'reply-model',
+        role: 'assistant',
+        content: '根据当前空气质量数据，建议开窗通风。',
+        status: 'complete',
+        createdAt: '2026-08-03T00:00:00.000Z'
+      },
+      responseType: 'knowledge',
+      sources: [{ type: 'model', observedAt: '2026-08-03T00:00:00.000Z', referenceId: 'model-adapter-v1' }]
+    });
+  };
+  const response = await sendConversationMessage('现在空气怎么样', {
+    fetchImpl,
+    storage: memoryStorage(),
+    locale: 'zh-CN',
+    timezone: 'Asia/Shanghai'
+  });
+  assert.equal(response.transportMode, 'backend');
+  assert.equal(response.message.content, '根据当前空气质量数据，建议开窗通风。');
+  assert.equal(response.responseType, 'knowledge');
+  assert.deepEqual(response.sources, [{ type: 'model', observedAt: '2026-08-03T00:00:00.000Z', referenceId: 'model-adapter-v1' }]);
+});
+
+test('HTTP 503 明确降级为本地 UI Mock 且不声称真实模型', async () => {
+  const response = await sendConversationMessage('你好', {
+    fetchImpl: async () => jsonResponse({ code: 'SERVICE_UNAVAILABLE', message: '后端暂不可用', retryable: true, requestId: 'request-503' }, 503),
+    storage: memoryStorage()
+  });
+  assert.equal(response.transportMode, 'ui_mock');
+  assert.match(response.message.content, /本地 UI Mock \/ 未连接后端/);
+  assert.equal(response.sources[0].type, 'mock');
+  assert.doesNotMatch(response.message.content, /真实模型|模型能力/);
+});
+
+test('后端可达但模型不可用时保留结构化公开错误，不降级为 UI Mock', async () => {
+  let posted;
+  const fetchImpl = async (url, init) => {
+    posted = { body: JSON.parse(init.body) };
+    return jsonResponse({
+      contractVersion: '1.0.0',
+      requestId: 'request-model-down',
+      conversationId: posted.body.conversationId,
+      message: {
+        id: 'reply-model-down',
+        role: 'assistant',
+        content: '模型服务暂不可用，已按固定模板回复。',
+        status: 'error',
+        createdAt: '2026-08-03T00:00:00.000Z'
+      },
+      responseType: 'error',
+      sources: [],
+      error: { code: 'MODEL_UNAVAILABLE', message: '模型服务暂不可用。', retryable: true, requestId: 'request-model-down' }
+    });
+  };
+  const response = await sendConversationMessage('讲个笑话', {
+    fetchImpl,
+    storage: memoryStorage(),
+    locale: 'zh-CN',
+    timezone: 'Asia/Shanghai'
+  });
+  assert.equal(response.transportMode, 'backend');
+  assert.equal(response.responseType, 'error');
+  assert.equal(response.error.code, 'MODEL_UNAVAILABLE');
+  assert.equal(response.message.content, '模型服务暂不可用，已按固定模板回复。');
+});

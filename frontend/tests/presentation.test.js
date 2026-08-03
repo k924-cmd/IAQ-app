@@ -4,7 +4,7 @@ import { chatPage } from '../src/pages/chat.js';
 import { devicesPage } from '../src/pages/devices.js';
 import { homePage } from '../src/pages/home.js';
 import { profilePage } from '../src/pages/profile.js';
-import { getReceiptPresentation, getTaskPresentation } from '../src/presentation.js';
+import { getReceiptPresentation, getSourceLabel, getTaskPresentation } from '../src/presentation.js';
 import { createMockDevices } from '../src/mocks/devices.js';
 
 const state = {
@@ -37,4 +37,9 @@ test('部分成功回执具有独立文案和图标', () => {
   const partial = getReceiptPresentation('partial_success');
   assert.equal(partial.label, '部分成功');
   assert.equal(partial.icon, '◐');
+});
+
+test('model 来源显示为模型标识，Mock 降级不冒充模型', () => {
+  assert.equal(getSourceLabel('model'), '模型');
+  assert.equal(getSourceLabel('mock'), 'Mock');
 });
