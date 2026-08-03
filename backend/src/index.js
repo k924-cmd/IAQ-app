@@ -10,6 +10,7 @@ import {
 } from "./adapters/fakes.js";
 import { AssistantService } from "./conversation/assistant-service.js";
 import { InMemoryDeviceRegistry } from "./devices/registry.js";
+import { DeepSeekModelAdapter } from "./adapters/deepseek.js";
 
 export function createLocalAssistant(overrides = {}) {
   const clock = overrides.clock ?? new ManualClock();
@@ -39,5 +40,6 @@ export function createLocalAssistant(overrides = {}) {
 }
 
 export * from "./adapters/fakes.js";
+export { DeepSeekModelAdapter, DEEPSEEK_DEFAULT_ENDPOINT, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_MAX_TOKENS_CAP, DEEPSEEK_TIMEOUT_MS_CAP } from "./adapters/deepseek.js";
 export * from "./devices/registry.js";
 export * from "./core/errors.js";

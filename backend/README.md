@@ -19,6 +19,26 @@ npm run start:http
 
 代码内可通过 `createHttpAssistantServer({ port: 0 })` 创建服务；`await service.start()` 返回实际随机端口，`await service.close()` 可完成关闭，适合本地联调与测试。
 
+## 真实模型适配器（DeepSeek，可选）
+
+真实模型仅用于 V1 普通聊天与空气健康知识问答的回复文本生成（DEP-2026-08-03-002）。它**默认关闭**：`createLocalAssistant()` 仍使用确定性 `FakeModelAdapter`，不会联网。模型输出只参与 `message.content`，`responseType`、设备、环境、策略、回执与来源结构仍由固定代码决定；没有 `ExecutionReceipt` 时，模型文本不得携带设备执行或当前状态事实，命中该边界的文本会被固定模板替换并按 `MODEL_UNAVAILABLE` 降级。
+
+启用方式（二选一）：
+
+- 环境变量：设置 `DEEPSEEK_ENABLED=1` 与 `DEEPSEEK_API_KEY=...`，再运行 `npm run start:http` 或 `npm run demo:model`。
+- 本地文件：复制 `backend/.env.example` 为 `backend/.env` 并填入密钥。`backend/.env` 已被 `.gitignore` 忽略，禁止提交。
+
+可用变量：`DEEPSEEK_ENABLED`、`DEEPSEEK_API_KEY`、`DEEPSEEK_ENDPOINT`（默认 `https://api.deepseek.com`）、`DEEPSEEK_MODEL`（默认 `deepseek-chat`）、`DEEPSEEK_MAX_TOKENS`（上限 512）、`DEEPSEEK_TIMEOUT_MS`（上限 15 秒）。适配器不自动重试，密钥不会写入日志、遥测或错误响应。
+
+真实调用验证：
+
+```powershell
+cd backend
+npm run demo:model
+```
+
+`demo:model` 会向 DeepSeek 发送一条聊天与一条知识问题，输出 `responseType`、`content` 与 `sources`；正常时应看到 `sources[0].type` 为 `model`。该演示输出只代表模型生成文本，不代表当前设备状态或执行结果。也可以通过 `start:http` 启动后向 `POST /v1/conversations/messages` 发送普通聊天观察相同结构。代码内注入 `fetchImpl` 的测试（`tests/deepseek-model.test.js`）可在不联网的情况下验证请求结构、超时、限额与降级。
+
 ## 可信链路
 
 ```text

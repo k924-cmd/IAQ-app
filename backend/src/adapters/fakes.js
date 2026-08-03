@@ -34,6 +34,9 @@ export class InMemoryStateRepository {
 export class FakeModelAdapter {
   constructor({ available = true, responder, candidateFactory } = {}) {
     this.available = available;
+    // Fake model replies are deterministic canned text, not generative model
+    // output; it must not be labelled with the "model" source.
+    this.generative = false;
     this.responder = responder ?? (() => "你好，我是 Luna。有什么空气或设备问题可以帮你？");
     this.candidateFactory = candidateFactory ?? (() => ({ intent: "unknown", entities: {}, evidence: "", source: "model", confidence: 0 }));
     this.candidateCalls = 0;

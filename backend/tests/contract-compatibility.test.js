@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { DeepSeekModelAdapter } from "../src/index.js";
 import { harness } from "./helpers.js";
 
 const schemaPath = fileURLToPath(new URL("../../shared/contracts/ai-assistant-v1.schema.json", import.meta.url));
@@ -15,6 +16,10 @@ function resolve(node) {
   if (!node?.$ref) return node;
   const name = node.$ref.split("/").at(-1);
   return schema.$defs[name];
+}
+
+function okFetch(content) {
+  return async () => new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200, headers: { "content-type": "application/json" } });
 }
 
 function validate(node, value, path = "value") {
@@ -63,4 +68,10 @@ test("共享契约 v1.0.0 代表性响应样例兼容校验（非完整 JSON Sch
   const taskConfirmation = await send("启动舒适优先优化");
   const task = await send("确认", { continuation: { type: "confirmation", id: taskConfirmation.confirmation.confirmationId } });
   for (const response of [environment, confirmation, execution, task]) validate(schema.$defs.SendMessageResponse, response, "response");
+
+  const model = new DeepSeekModelAdapter({ apiKey: "contract-key", enabled: true, fetchImpl: okFetch("模型生成的一般知识文本。") });
+  const { send: modelSend } = harness({ model });
+  const modelChat = await modelSend("你好");
+  const modelKnowledge = await modelSend("二氧化碳为什么会升高");
+  for (const response of [modelChat, modelKnowledge]) validate(schema.$defs.SendMessageResponse, response, "response");
 });

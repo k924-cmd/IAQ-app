@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/demo.js",
     "start:http": "node src/server.js",
+    "demo:model": "node src/demo-model.js",
     "test": "node --test",
     "test:ac": "node --test --test-name-pattern=AC-"
   },
