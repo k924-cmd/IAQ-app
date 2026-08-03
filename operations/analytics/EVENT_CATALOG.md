@@ -4,7 +4,7 @@
 
 - 权威来源：`shared/contracts/events.md` 和 `shared/contracts/ai-assistant-v1.schema.json` v1.0.0。
 - 本目录只解释采集时机、最小字段和隐私检查，不扩展共享契约。
-- 当前尚未接入生产采集服务；本地联调事件不是真实用户行为数据。
+- 真实模型调用已按 DEP-2026-08-03-002 获授权（DeepSeek 仅用于聊天与知识问答）；生产事件采集服务仍未接入，本地事件不是真实用户行为数据。
 - 事件发送失败必须被隔离，不得改变会话响应、策略裁决、任务状态或设备执行结果。
 
 ## 2. 公共事件信封
@@ -28,13 +28,13 @@
 | `eventName` | 何时发送 | `properties` 必需且仅允许字段 | 运营口径 |
 |---|---|---|---|
 | `assistant_request_received` | 请求通过传输层基础校验并进入助手链路 | `messageLength`, `locale` | 只记录长度和语言，不记录 `message` |
-| `assistant_response_completed` | 一次结构化回复完成 | `responseType`, `outcome`, `durationMs` | `responseType` 按会话契约；不记录回复正文 |
+| `assistant_response_completed` | 一次结构化回复完成 | `responseType`, `outcome`, `durationMs` | `responseType` 按会话契约；回复由真实模型生成时仍不记录完整回复、用户输入、提示词或敏感对话；`outcome` 为 `completed` 或公开错误码 |
 | `clarification_presented` | 向用户展示待澄清问题 | `clarificationKind` | 仅记类型，不记提示文案、选项文本或原请求 |
 | `confirmation_presented` | 向用户展示待确认计划 | `planKind`, `expiresInSeconds` | 不记录计划摘要、设备名或动作自由文本 |
 | `confirmation_resolved` | 当前确认被确认、取消或失效 | `resolution` | 只记结果枚举，不记录用户原话 |
 | `task_state_changed` | 任务状态实际迁移完成 | `taskType`, `fromStatus`, `toStatus`, `isSimulation` | 状态以后端可信任务为准；请求受理不等于迁移完成 |
 | `device_action_completed` | 单项动作获得终态或当前可信回执 | `deviceType`, `action`, `receiptStatus`, `executionSource` | 使用 `deviceType`，不记录自由文本设备名；超时和未知不记为成功 |
-| `dependency_degraded` | 依赖不可用且业务进入明确降级 | `dependency`, `errorCode` | 只记录稳定依赖类型与公开错误码，不记录 URL、异常消息或堆栈 |
+| `dependency_degraded` | 依赖不可用且业务进入明确降级 | `dependency`, `errorCode` | 模型不可用时 `dependency=model`、`errorCode=MODEL_UNAVAILABLE`；只记录稳定依赖类型与公开错误码，不记录 URL、异常消息或堆栈 |
 | `public_error_returned` | 向用户返回公开错误 | `errorCode`, `surface`, `retryable` | 只记录公开错误码和展示面，不记录 `message` 或内部错误 |
 
 上表字段由共享 Schema 按 `eventName` 逐事件限定，少字段或多字段都不合约。未经共享契约升级，不得在 `properties` 中增加计划摘要、错误消息、设备名、用户输入、助手回复或任意 `metadata`。
@@ -78,6 +78,7 @@
 | 凭据 | 不存在 API Key、Secret、Token、设备凭据或可执行连接信息 |
 | 个人信息 | 不存在未脱敏姓名、联系方式、精确住址或其他可识别个人的信息 |
 | 模型与内部错误 | 不存在模型原始提示词、模型原始输出、内部堆栈或异常消息 |
+| 真实模型内容 | 模型生成回复、用户完整输入和提示词不进入事件；事件无 token 数、成本金额或模型名称字段 |
 | 设备标识 | 不存在自由文本设备名；只使用 `deviceType` 或契约允许的稳定 ID 不可逆散列 |
 | 客户端身份 | 不存在浏览器自报 `actorId`、`scopeId` 或任意身份头 |
 | Mock/Replay 真实性 | 事件不会被用于声称真实模型、真实设备、真实 DQN 或真实收益 |
@@ -86,3 +87,24 @@
 ## 6. 事件契约收口状态
 
 main 提交 `9419a34` 已明确 `properties` 必需性、逐事件字段/类型/枚举白名单以及 `executionSource` 语义。原第 6 节四项待确认问题均已关闭；联调应直接使用 v1.0.0 共享 Schema 验证事件。
+
+## 7. 真实模型调用口径与成本隐私检查
+
+### 7.1 授权与范围
+
+- DEP-2026-08-03-002 已 accepted：真实模型（DeepSeek）仅用于聊天与知识问答，不参与设备解析、计划、策略裁决或执行结果。
+- 对外部模型调用必须以用户明确授权为前提，并在发布材料中说明影响范围。
+
+### 7.2 事件口径
+
+- `assistant_response_completed.responseType` 为 `chat` 或 `knowledge` 时，回复内容可能由真实模型生成；事件仍必须脱敏，不得记录完整回复、用户完整输入、提示词、模型原始输出或敏感对话。
+- 顶层 `source` 只表示事件发出端（`frontend`/`backend`），不写入模型名称或厂商标识；事件属性中没有模型身份字段。
+- 事件属性白名单不允许自定义成本或 token 指标：`assistant_response_completed` 仅允许 `responseType`、`outcome`、`durationMs`，不得以 `metadata` 或额外字段补充 token 数、成本金额。
+- 模型不可用时使用 `dependency_degraded`：`dependency=model`、`errorCode=MODEL_UNAVAILABLE`；仍不得包含 URL、堆栈、凭据或原始异常消息。
+- `outcome` 为 `completed` 或公开错误码（如 `MODEL_UNAVAILABLE`、`SERVICE_UNAVAILABLE`），不写入自然语言失败原因。
+
+### 7.3 成本与密钥检查（运营视角）
+
+- 成本上限属于部署配置核验项，不由事件承担：`max_tokens=512`、请求超时 15 秒、不自动重试（DEP-2026-08-03-002）。
+- 密钥不入库、不入日志、不入事件、不入打包产物；仅通过非敏感环境变量或密钥管理注入。
+- 事件继续脱敏：真实模型调用不改变既有禁止字段与最小白名单。
