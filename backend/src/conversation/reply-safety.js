@@ -7,6 +7,8 @@
 
 export const MODEL_REPLY_MAX_CHARS = 4000;
 
+const HEALTH_TOPIC_PATTERN = /健康|症状|医疗|诊断|疾病|哮喘|过敏|呼吸(道|系统|困难|急促|不畅)|肺|胸(闷|痛)|心(脏病|悸|慌)|头晕|头痛|咳嗽|鼻炎|不适|体感|中毒|一氧化碳|血压|体温|缺氧|窒息|皮疹|乏力|恶心|呕吐/;
+
 const EXECUTION_CLAIM_PATTERNS = [
   /(已|已经)(开启|打开|关闭|关掉|启动|停止|执行|处理|完成)/,
   /(开启|打开|关闭|关掉|启动|执行|处理|完成|搞定)(了|完毕|成功|完成)/,
@@ -32,4 +34,12 @@ export function guardModelReply(raw) {
   if (EXECUTION_CLAIM_PATTERNS.some((pattern) => pattern.test(text))) return null;
   if (CURRENT_READING_PATTERNS.some((pattern) => pattern.test(text))) return null;
   return text;
+}
+
+/**
+ * Detects whether any of the given texts touch health, symptoms or medical
+ * topics, in which case the medical reinforcement disclaimer must be added.
+ */
+export function detectHealthTopic(...texts) {
+  return texts.some((text) => typeof text === "string" && HEALTH_TOPIC_PATTERN.test(text));
 }

@@ -4,7 +4,6 @@ export function decideSingleDevice(device, action, targetState) {
   if (device.connectionStatus !== "online" || device.state === "unknown") return reject("DEVICE_UNAVAILABLE", "设备离线或状态未知，不能执行。");
   if (!device.availableActions.includes(action) || !targetState) return reject("ACTION_UNSUPPORTED", "设备不支持该动作。");
   if (device.state === targetState) return { outcome: "allow", reasonCodes: ["TARGET_ALREADY_SATISFIED"], alternatives: [] };
-  if (device.type === "smart_window") return { outcome: "confirm", reasonCodes: ["WINDOW_STATE_CHANGE"], alternatives: [] };
   return { outcome: "allow", reasonCodes: ["EXPLICIT_IDEMPOTENT_CONTROL"], alternatives: [] };
 }
 

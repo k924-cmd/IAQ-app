@@ -2,8 +2,10 @@ const DEVICE_WORDS = ["空气净化器", "净化器", "智能窗户", "窗户", 
 const CONTROL_WORDS = /打开|开启|启动|关掉|关闭|开窗|关窗|控制/;
 const QUESTION_WORDS = /状态|怎么样|是否|在线|接入|可用|开着|关着/;
 const URGENT_WORDS = /呼吸困难|胸痛|昏厥|中毒|煤气|一氧化碳|严重不适|喘不过气/;
+const WEATHER_OR_OUTDOOR_PATTERN = /(天气预报|今天(的)?天气|现在(的)?天气|实时天气|天气怎么样|天气如何|气温(是)?多少|今天.*(下雨|下雪|阴天|晴天|刮风)|室外\s*(PM2\.5|PM25|温度|湿度|空气(质量|指数)?|AQI)|空气质量指数|AQI|外面(现在)?(冷不冷|热不热|多少度|空气质量|空气怎么样))/;
+const WEATHER_CONCEPT_GUARD = /是什么|为什么|原理|怎么工作|如何工作|有什么用|介绍一下|知识|适合/;
 
-export const INTENTS = new Set(["chat", "knowledge_query", "environment_query", "device_query", "device_control", "cooking_guard_create", "optimization_create", "task_query", "task_pause", "task_resume", "task_stop", "confirm", "cancel", "unknown"]);
+export const INTENTS = new Set(["chat", "knowledge_query", "environment_query", "device_query", "device_control", "cooking_guard_create", "optimization_create", "task_query", "task_pause", "task_resume", "task_stop", "weather_query", "confirm", "cancel", "unknown"]);
 const MODEL_FORBIDDEN_STATE_MUTATIONS = new Set(["confirm", "cancel", "task_pause", "task_resume", "task_stop"]);
 
 function deviceMentions(text) {
@@ -35,6 +37,14 @@ export function localRoute(rawText) {
 
   if (/真实\s*(DQN|模型)|live_model|自定义.*权重|真实.*(节能|收益)|绕过.*(安全|策略|确认)|真实\s*MQTT/i.test(text)) {
     return candidate("unknown", { unsupported: true }, text);
+  }
+
+  // E3: real-time weather / outdoor values have no trusted external source in
+  // V1; reject before environment queries so indoor snapshots are never
+  // presented as outdoor data. Conceptual questions ("室外 PM2.5 是什么")
+  // stay on the knowledge path.
+  if (WEATHER_OR_OUTDOOR_PATTERN.test(text) && !WEATHER_CONCEPT_GUARD.test(text)) {
+    return candidate("weather_query", {}, text);
   }
 
   if (/(Mock|Replay|模拟优化)/i.test(text) && /(什么|原理|区别|如何|介绍|知识)/.test(text)) return candidate("knowledge_query", { urgent: false }, text);

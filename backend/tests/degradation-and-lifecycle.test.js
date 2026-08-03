@@ -57,13 +57,27 @@ test("AC-084 Mock/Replay 不可用时不创建任务也不继续候选动作", a
   assert.equal(app.adapters.devices.commands.length, 0);
 });
 
-test("AC-085 依赖故障恢复后仍复核期限、状态版本和策略", async (context) => {
+test("AC-085 依赖故障恢复后仍复核期限、状态版本和策略；窗户免确认不降低校验", async (context) => {
+  await context.test("window no-confirm keeps capability and execution checks", async () => {
+    const devices = new FakeDeviceAdapter();
+    devices.available = false;
+    const { send } = harness({ devices });
+    const failed = await send("打开智能窗户");
+    assert.equal(failed.receipt.status, "failed");
+    assert.equal(failed.receipt.actions[0].errorCode, "SERVICE_UNAVAILABLE");
+    assert.doesNotMatch(failed.message.content, /确认完成/);
+    devices.available = true;
+    const succeeded = await send("打开智能窗户");
+    assert.equal(succeeded.receipt.status, "succeeded");
+    assert.equal(devices.commands.length, 1);
+  });
+
   await context.test("state version", async () => {
     const devices = new FakeDeviceAdapter();
     devices.available = false;
     const { app, send } = harness({ devices });
-    const pending = await send("打开智能窗户");
-    app.adapters.registry.updateState("window-living", "open");
+    const pending = await send("今天18点开始火锅空气守护");
+    app.adapters.registry.updateState("hood-kitchen", "on");
     devices.available = true;
     const invalidated = await confirm(send, pending.confirmation);
     assert.equal(invalidated.error.code, "CONFIRMATION_INVALIDATED");
@@ -74,7 +88,7 @@ test("AC-085 依赖故障恢复后仍复核期限、状态版本和策略", asyn
     const devices = new FakeDeviceAdapter();
     devices.available = false;
     const instance = harness({ devices });
-    const pending = await instance.send("打开智能窗户");
+    const pending = await instance.send("今天18点开始火锅空气守护");
     instance.app.adapters.clock.advance(121_000);
     devices.available = true;
     const expired = await confirm(instance.send, pending.confirmation);
@@ -86,9 +100,9 @@ test("AC-085 依赖故障恢复后仍复核期限、状态版本和策略", asyn
     const devices = new FakeDeviceAdapter();
     devices.available = false;
     const { app, send } = harness({ devices });
-    const pending = await send("打开智能窗户");
-    const window = app.adapters.registry.get("window-living");
-    app.adapters.registry.replace({ ...window, connectionStatus: "offline" });
+    const pending = await send("今天18点开始火锅空气守护");
+    const hood = app.adapters.registry.get("hood-kitchen");
+    app.adapters.registry.replace({ ...hood, connectionStatus: "offline" });
     devices.available = true;
     const rejected = await confirm(send, pending.confirmation);
     assert.equal(rejected.error.code, "CONFIRMATION_INVALIDATED");
@@ -122,7 +136,7 @@ test("到期调度状态版本变化时失败且不执行", async () => {
 
 test("会话结束清除最小会话临时状态", async () => {
   const { app, send } = harness();
-  await send("打开智能窗户");
+  await send("启动舒适优先优化");
   assert.ok(app.adapters.repository.getConversation("conversation-1").pendingConfirmation);
   assert.equal(app.endConversation("conversation-1"), true);
   assert.equal(app.adapters.repository.conversations.has("conversation-1"), false);

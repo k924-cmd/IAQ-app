@@ -15,6 +15,11 @@ test("问候开头优先于通用知识兜底，但不破坏既有意图", () =>
     ["介绍一下自己", "knowledge_query"],
     ["介绍一下空气净化器", "knowledge_query"],
     ["二氧化碳为什么会升高", "knowledge_query"],
+    ["今天天气怎么样", "weather_query"],
+    ["室外 PM2.5 是多少", "weather_query"],
+    ["现在空气怎么样", "environment_query"],
+    ["室外 PM2.5 是什么", "knowledge_query"],
+    ["为什么下雨天要通风", "knowledge_query"],
     // 主题明确的知识问答即使带问候前缀仍为 knowledge_query
     ["你好，二氧化碳为什么会升高", "knowledge_query"],
     ["你好，介绍一下 PM2.5 知识", "knowledge_query"],

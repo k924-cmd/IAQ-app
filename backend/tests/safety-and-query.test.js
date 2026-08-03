@@ -160,6 +160,7 @@ test("AC-010 普通问候是非执行回复且无计划", async () => {
   const { app, send } = harness();
   const result = await send("你好 Luna");
   assert.equal(result.responseType, "chat");
+  assert.match(result.message.content, /仅供参考/);
   assert.equal(app.adapters.devices.commands.length, 0);
   assert.equal(app.adapters.repository.getConversation("conversation-1").pendingConfirmation, null);
 });
@@ -169,6 +170,7 @@ test("AC-011 AC-012 知识回复保留医疗边界，危险暴露优先安全引
   const { send } = harness({ model });
   const knowledge = await send("空气质量会影响健康吗");
   assert.match(knowledge.message.content, /不构成医疗诊断/);
+  assert.match(knowledge.message.content, /仅供参考/);
   assert.equal(knowledge.sources[0].type, "template");
   assert.doesNotMatch(knowledge.message.content, /这是一般空气知识/);
   assert.match((await send("我呼吸困难并且胸痛")).message.content, /离开.*风险环境.*紧急服务|紧急服务.*专业医疗/);
@@ -281,29 +283,20 @@ test("AC-030 AC-031 净化器和油烟机明确开关可直接执行", async () 
   assert.equal(app.adapters.devices.commands.length, 2);
 });
 
-test("AC-032 AC-033 智能窗户必须确认且有效确认后才执行", async () => {
+test("AC-032 AC-033 智能窗户明确开关直接执行且保留可信回执", async () => {
   const { app, send } = harness();
-  const pending = await send("打开智能窗户");
-  assert.equal(pending.responseType, "confirmation");
-  assert.equal(app.adapters.devices.commands.length, 0);
-  const result = await confirm(send, pending.confirmation);
-  assert.equal(result.receipt.status, "succeeded");
+  const opened = await send("打开智能窗户");
+  assert.equal(opened.responseType, "execution_result");
+  assert.equal(opened.confirmation, undefined);
+  assert.equal(opened.receipt.status, "succeeded");
+  assert.equal(opened.receipt.source, "mock");
   assert.equal(app.adapters.devices.commands.length, 1);
-});
-
-test("AC-034 过期、取消或状态版本变化的确认不能执行", async () => {
-  const first = harness();
-  const cancelled = await first.send("打开智能窗户");
-  await first.send("取消");
-  assert.equal((await first.send("确认")).error.code, "CONFIRMATION_NOT_FOUND");
-  const second = harness();
-  const expired = await second.send("打开智能窗户");
-  second.app.adapters.clock.advance(121_000);
-  assert.equal((await confirm(second.send, expired.confirmation)).error.code, "CONFIRMATION_EXPIRED");
-  const third = harness();
-  const changed = await third.send("打开智能窗户");
-  third.app.adapters.registry.updateState("window-living", "open");
-  assert.equal((await confirm(third.send, changed.confirmation)).error.code, "CONFIRMATION_INVALIDATED");
+  const noop = await send("打开智能窗户");
+  assert.equal(noop.receipt.status, "noop");
+  assert.equal(app.adapters.devices.commands.length, 1);
+  const closed = await send("关闭智能窗户");
+  assert.equal(closed.receipt.status, "succeeded");
+  assert.equal(app.adapters.devices.commands.length, 2);
 });
 
 test("AC-035 目标状态已满足时返回 noop 且不调用设备适配器", async () => {

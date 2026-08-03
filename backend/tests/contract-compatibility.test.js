@@ -63,7 +63,7 @@ test("共享契约 v1.0.0 代表性响应样例兼容校验（非完整 JSON Sch
   assert.equal(schema.$defs.SendMessageRequest.properties.contractVersion.const, "1.0.0");
   const { send } = harness();
   const environment = await send("现在空气怎么样");
-  const confirmation = await send("打开智能窗户");
+  const confirmation = await send("启动舒适优先优化");
   const execution = await send("取消").then(() => send("打开空气净化器"));
   const taskConfirmation = await send("启动舒适优先优化");
   const task = await send("确认", { continuation: { type: "confirmation", id: taskConfirmation.confirmation.confirmationId } });

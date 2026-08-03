@@ -97,12 +97,12 @@ test("AC-053 有效确认只创建 Mock 或 Replay 模拟任务", async () => {
   }
 });
 
-test("AC-054 离线、未接入、非法动作与需确认候选分别被屏蔽", async (context) => {
+test("AC-054 离线、未接入、非法动作与策略拒绝候选分别被屏蔽", async (context) => {
   const cases = [
     { name: "offline", candidate: { deviceId: "purifier-living", action: "turn_on" }, arrange(app) { const device = app.adapters.registry.get("purifier-living"); app.adapters.registry.replace({ ...device, connectionStatus: "offline" }); } },
     { name: "not-integrated", candidate: { deviceId: "humidifier", action: "turn_on" } },
     { name: "illegal-action", candidate: { deviceId: "purifier-living", action: "open" } },
-    { name: "confirmation-required", candidate: { deviceId: "window-living", action: "open" } },
+    { name: "window-offline", candidate: { deviceId: "window-living", action: "open" }, arrange(app) { const device = app.adapters.registry.get("window-living"); app.adapters.registry.replace({ ...device, connectionStatus: "offline" }); } },
   ];
   for (const item of cases) {
     await context.test(item.name, async () => {
@@ -116,6 +116,15 @@ test("AC-054 离线、未接入、非法动作与需确认候选分别被屏蔽"
       assert.equal(app.adapters.devices.commands.length, 0);
     });
   }
+
+  await context.test("window-allowed-after-no-confirm", async () => {
+    const optimizer = new FakeOptimizerAdapter({ candidates: [{ deviceId: "window-living", action: "open" }] });
+    const { app, send } = harness({ optimizer });
+    await createOptimization(send);
+    const cycle = await app.runOptimizationCycle("home-1");
+    assert.equal(cycle.executed, true);
+    assert.equal(app.adapters.devices.commands.some((command) => command.deviceId === "window-living"), true);
+  });
 });
 
 test("AC-055 没有合法候选动作时明确本轮无执行", async () => {
@@ -378,20 +387,20 @@ test("AC-067 重复暂停、恢复、停止保持幂等状态版本", async () =
 test("AC-070 AC-071 确认只执行当前待确认计划，无计划不回放", async () => {
   const { app, send } = harness();
   assert.equal((await send("确认")).error.code, "CONFIRMATION_NOT_FOUND");
-  const pending = await send("打开智能窗户");
+  const pending = await send("启动舒适优先优化");
   await confirm(send, pending.confirmation);
-  assert.equal(app.adapters.devices.commands.length, 1);
+  assert.ok(app.taskService.current("home-1"));
   assert.equal((await send("确认")).error.code, "CONFIRMATION_NOT_FOUND");
-  assert.equal(app.adapters.devices.commands.length, 1);
+  assert.equal(app.taskService.current("home-1").taskVersion, 1);
 });
 
 test("AC-072 取消清除待确认且不执行", async () => {
   const { app, send } = harness();
-  await send("打开智能窗户");
+  await send("启动舒适优先优化");
   const result = await send("不用了");
   assert.match(result.message.content, /已取消/);
   assert.equal(app.adapters.repository.getConversation("conversation-1").pendingConfirmation, null);
-  assert.equal(app.adapters.devices.commands.length, 0);
+  assert.equal(app.taskService.current("home-1"), null);
 });
 
 test("AC-073 最近唯一设备指代重新经过安全链路", async () => {

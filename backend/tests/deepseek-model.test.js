@@ -87,7 +87,7 @@ test("真实模型安全聊天回复进入 chat 且来源为 model", async () =>
   const { app, send } = harness({ model: adapter });
   const chat = await send("你好");
   assert.equal(chat.responseType, "chat");
-  assert.equal(chat.message.content, "你好，很高兴认识你。");
+  assert.equal(chat.message.content, "你好，很高兴认识你。 Luna 是 AI 工具噢，我的回答仅供参考。");
   assert.equal(chat.sources.length, 1);
   assert.equal(chat.sources[0].type, "model");
   assert.equal(chat.sources[0].referenceId, "deepseek-chat");
@@ -96,13 +96,14 @@ test("真实模型安全聊天回复进入 chat 且来源为 model", async () =>
   assert.equal(app.adapters.devices.commands.length, 0);
 });
 
-test("真实模型知识回复保留医疗边界且来源为 model", async () => {
+test("真实模型知识回复附统一免责且来源为 model", async () => {
   const adapter = makeAdapter(okFetch("二氧化碳通常因人员呼吸和通风不足而累积。"));
   const { send } = harness({ model: adapter });
   const knowledge = await send("二氧化碳为什么会升高");
   assert.equal(knowledge.responseType, "knowledge");
   assert.match(knowledge.message.content, /人员呼吸和通风不足/);
-  assert.match(knowledge.message.content, /不构成医疗诊断/);
+  assert.match(knowledge.message.content, /仅供参考/);
+  assert.doesNotMatch(knowledge.message.content, /不构成医疗诊断/);
   assert.equal(knowledge.sources[0].type, "model");
   assert.equal(knowledge.receipt, undefined);
 });

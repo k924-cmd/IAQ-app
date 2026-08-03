@@ -14,15 +14,20 @@ import {
 import { actionTarget } from "../devices/registry.js";
 import { localRoute, validateSemanticCandidate } from "./router.js";
 import { lookupKnowledge } from "./knowledge-base.js";
-import { guardModelReply } from "./reply-safety.js";
+import { detectHealthTopic, guardModelReply } from "./reply-safety.js";
 import { decideSingleDevice, validatePlannedActions } from "../policies/policy.js";
 import { OPTIMIZATION_MODES } from "../adapters/fakes.js";
 import { TaskService } from "../tasks/task-service.js";
 
+const AI_DISCLAIMER = " Luna 是 AI 工具噢，我的回答仅供参考。";
+const MEDICAL_DISCLAIMER = " 以上仅为一般性信息，不构成医疗诊断，也不能替代专业医疗建议。";
 const CHAT_FALLBACK_TEMPLATE = "你好，我是 Luna。我可以陪你聊聊，也可以帮助查询空气、设备或管理 V1 任务。设备状态和执行结果只会依据可信状态或回执说明。";
 const CHAT_DEGRADED_TEMPLATE = "聊天模型暂时不可用；设备和环境的明确查询、本地确定性控制仍可继续使用。";
 const KNOWLEDGE_URGENT_TEMPLATE = "请先离开可能的风险环境，到空气安全处，并尽快联系当地紧急服务或专业医疗人员。这里不能替代紧急救助或医疗诊断。";
-const KNOWLEDGE_DISCLAIMER = " 以上仅为一般性信息，不构成医疗诊断，也不能替代专业医疗建议。";
+
+function composeReplyText(content, healthTopic) {
+  return `${content}${AI_DISCLAIMER}${healthTopic ? MEDICAL_DISCLAIMER : ""}`;
+}
 
 export class AssistantService {
   constructor(dependencies) {
@@ -250,6 +255,7 @@ export class AssistantService {
     switch (route.intent) {
       case "chat": return this.#chat(request, requestId);
       case "knowledge_query": return this.#knowledge(request, requestId, route);
+      case "weather_query": return this.#rejection(request, requestId, "ENVIRONMENT_UNAVAILABLE", "V1 暂无可信的外部实时天气或室外数据源，无法提供室外数值或天气预报；室内环境与设备查询仍可使用可信快照。", []);
       case "environment_query": return this.#environment(request, requestId, route);
       case "device_query": return this.#deviceQuery(state, request, requestId, route);
       case "device_control": return this.#deviceControl(state, request, transport, requestId, route);
@@ -269,35 +275,34 @@ export class AssistantService {
       if (this.model?.generative === true) {
         const guarded = guardModelReply(await this.model.respond({ kind: "chat", message: request.message }));
         if (!guarded) throw new Error("unsafe model reply");
-        return this.#response(request, requestId, "chat", guarded, [sourceRef("model", this.clock.iso(), this.model.referenceId)]);
+        return this.#response(request, requestId, "chat", composeReplyText(guarded, detectHealthTopic(request.message, guarded)), [sourceRef("model", this.clock.iso(), this.model.referenceId)]);
       }
       await this.model.respond({ kind: "chat", message: request.message });
-      return this.#response(request, requestId, "chat", CHAT_FALLBACK_TEMPLATE, [sourceRef("template", this.clock.iso())]);
+      return this.#response(request, requestId, "chat", composeReplyText(CHAT_FALLBACK_TEMPLATE, detectHealthTopic(request.message)), [sourceRef("template", this.clock.iso())]);
     } catch {
       this.#event("dependency_degraded", { requestId, conversationId: request.conversationId, properties: { dependency: "model", errorCode: "MODEL_UNAVAILABLE" } });
-      return this.#response(request, requestId, "chat", CHAT_DEGRADED_TEMPLATE, [sourceRef("template", this.clock.iso())], { error: { code: "MODEL_UNAVAILABLE", message: "聊天模型暂时不可用。", retryable: true, requestId } });
+      return this.#response(request, requestId, "chat", composeReplyText(CHAT_DEGRADED_TEMPLATE, detectHealthTopic(request.message)), [sourceRef("template", this.clock.iso())], { error: { code: "MODEL_UNAVAILABLE", message: "聊天模型暂时不可用。", retryable: true, requestId } });
     }
   }
 
   async #knowledge(request, requestId, route) {
     if (route.entities.urgent) {
-      return this.#response(request, requestId, "knowledge", KNOWLEDGE_URGENT_TEMPLATE, [sourceRef("template", this.clock.iso())]);
+      return this.#response(request, requestId, "knowledge", composeReplyText(KNOWLEDGE_URGENT_TEMPLATE, true), [sourceRef("template", this.clock.iso())]);
     }
     const knowledge = lookupKnowledge(request.message);
     if (this.model?.generative === true) {
       try {
         const guarded = guardModelReply(await this.model.respond({ kind: "knowledge", message: request.message, topic: knowledge.topic }));
         if (guarded) {
-          return this.#response(request, requestId, "knowledge", `${guarded}${KNOWLEDGE_DISCLAIMER}`, [sourceRef("model", this.clock.iso(), this.model.referenceId)]);
+          return this.#response(request, requestId, "knowledge", composeReplyText(guarded, detectHealthTopic(request.message, guarded)), [sourceRef("model", this.clock.iso(), this.model.referenceId)]);
         }
       } catch {
         // Fall through to the fixed local knowledge base.
       }
       this.#event("dependency_degraded", { requestId, conversationId: request.conversationId, properties: { dependency: "model", errorCode: "MODEL_UNAVAILABLE" } });
-      return this.#response(request, requestId, "knowledge", `${knowledge.content}${KNOWLEDGE_DISCLAIMER}`, [sourceRef("template", this.clock.iso(), `knowledge-${knowledge.topic}-v1`)], { error: { code: "MODEL_UNAVAILABLE", message: "知识模型暂时不可用，已使用本地固定知识。", retryable: true, requestId } });
+      return this.#response(request, requestId, "knowledge", composeReplyText(knowledge.content, detectHealthTopic(request.message, knowledge.content)), [sourceRef("template", this.clock.iso(), `knowledge-${knowledge.topic}-v1`)], { error: { code: "MODEL_UNAVAILABLE", message: "知识模型暂时不可用，已使用本地固定知识。", retryable: true, requestId } });
     }
-    const content = `${knowledge.content}${KNOWLEDGE_DISCLAIMER}`;
-    return this.#response(request, requestId, "knowledge", content, [sourceRef("template", this.clock.iso(), `knowledge-${knowledge.topic}-v1`)]);
+    return this.#response(request, requestId, "knowledge", composeReplyText(knowledge.content, detectHealthTopic(request.message, knowledge.content)), [sourceRef("template", this.clock.iso(), `knowledge-${knowledge.topic}-v1`)]);
   }
 
   async #environment(request, requestId, route) {
