@@ -5,9 +5,9 @@
 
 ## 基线快照
 
-- 最后更新：2026-08-03（Asia/Shanghai）
-- 主线 HEAD：`71d7735`（`fix(backend): route greeting before generic knowledge fallback`）
-- 远端同步：`main` 领先远端 9 个提交，待推送
+- 最后更新：2026-08-04（Asia/Shanghai）
+- 主线 HEAD：`8d4af96`（`fix(backend): isolate deepseek .env test from local config`）
+- 远端同步：`main` 领先远端 6 个提交，待推送
 - 工作树：干净
 
 ## 当前目标（已关闭）
@@ -25,10 +25,16 @@
 
 | 工作线 | 分支 | Worktree | 最近成果 | 测试 |
 |---|---|---|---|---|
-| 前端 | `codex/frontend-ui` | `C:\Users\Administrator\.codex\worktrees\5c6d\codex_IAQapp` | API 集成、旧 SW 恢复、model 来源与降级验证 | 14/14 |
-| 后端 | `codex/backend-core` | `C:\Users\Administrator\.codex\worktrees\43a5\codex_IAQapp` | 本地 HTTP、DeepSeek 适配器、路由修复 | 103/103 |
-| 产品 | `codex/product-spec` | `C:\Users\Administrator\.codex\worktrees\db02\codex_IAQapp` | PRD、AC-014～019、真实模型决策记录 | 无独立测试 |
-| 运营 | `codex/operations` | `C:\Users\Administrator\.codex\worktrees\4047\codex_IAQapp` | 事件口径、发布检查第 7 节、V1 验收记录 | 无独立测试 |
+| 前端 | `codex/frontend-ui` | `C:\Users\Administrator\.codex\worktrees\5c6d\codex_IAQapp` | 免责样式、窗户免确认、回执/时间/滚动呈现、多设备澄清链路 | 25/25 |
+| 后端 | `codex/backend-core` | `C:\Users\Administrator\.codex\worktrees\43a5\codex_IAQapp` | DEP-003 免责/E3/E4、窗户免确认、DEP-005 缺陷修复 | 115/115 |
+| 产品 | `codex/product-spec` | `C:\Users\Administrator\.codex\worktrees\db02\codex_IAQapp` | DEP-003/004 定稿、呈现口径追加、AC 修订 | 无独立测试 |
+| 运营 | `codex/operations` | `C:\Users\Administrator\.codex\worktrees\4047\codex_IAQapp` | 事件口径、发布检查、V1 验收记录（复核已并入） | 无独立测试 |
+
+## 当前变更（待终验）
+
+- `DEP-2026-08-03-003` 免责声明统一口径与展示边界（含 E3/E4）：`accepted`，待人工回归终验。
+- `DEP-2026-08-03-004` 智能窗户免确认直接执行：`accepted`，待人工回归终验。
+- `DEP-2026-08-03-005` V1 已定义行为缺陷修复：`accepted`，待人工回归终验。
 
 ## 共享契约（`shared/**`，协调窗口维护）
 
