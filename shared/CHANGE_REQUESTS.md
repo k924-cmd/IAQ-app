@@ -105,3 +105,10 @@
 - 网络策略：允许本地开发时后端联网调用 DeepSeek API；默认直连，不强制代理（如有需要可通过环境变量配置代理）。
 - 安全边界不变：模型输出不得直接进入 Executor；设备、环境、策略、回执仍由固定代码决定。
 - 结论：前置授权满足，`DEP-2026-08-03-002` 推进为 `accepted`，进入派发执行。
+
+### 共享契约评估（2026-08-03）
+
+- `shared/contracts/ai-assistant-v1.schema.json` 的 `Source` 枚举已包含 `model`，`SourceRef.type` 可直接用于标记模型来源，无需新增枚举。
+- `SendMessageResponse.message.content` 语义不变：始终是面向用户的展示文本；真实模型仅参与生成 `content`，不改写 `responseType`、`sources` 结构与业务字段。
+- `sources` 保留原有含义：本次新增来源 `model` 与 `observedAt`（调用时间），`referenceId` 可省略或放稳定模型标识。
+- 结论：共享契约 v1.0.0 **无需版本化升级**；后端实现按现有 Schema 输出即可。产品线仍需补充 AC（自然语言回复、知识边界、医疗边界、降级口径）。
