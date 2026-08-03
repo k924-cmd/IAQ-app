@@ -60,8 +60,12 @@ export function localRoute(rawText) {
 
   if (URGENT_WORDS.test(text)) return candidate("knowledge_query", { urgent: true }, text);
   if (/空气|通风|PM2\.5|二氧化碳|CO2|湿度|温度|净化|健康|医疗|诊断/i.test(text)) return candidate("knowledge_query", { urgent: false }, text);
-  if (/(是什么|为什么|原理|怎么工作|如何工作|有什么用|介绍一下|知识)/.test(text)) return candidate("knowledge_query", { urgent: false }, text);
+  // Greeting chat takes priority over the generic knowledge fallback below,
+  // so "你好，简单介绍一下自己" routes to chat while plain "介绍一下自己"
+  // still routes to knowledge_query. Urgent and topic-specific knowledge
+  // rules above stay ahead of the greeting to preserve existing intents.
   if (/^(你好|您好|嗨|hi|hello|早上好|晚上好)/i.test(text)) return candidate("chat", {}, text);
+  if (/(是什么|为什么|原理|怎么工作|如何工作|有什么用|介绍一下|知识)/.test(text)) return candidate("knowledge_query", { urgent: false }, text);
   return null;
 }
 
