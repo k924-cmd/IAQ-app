@@ -5,6 +5,14 @@
 *.log
 .tmp/
 
+# Secrets and local environment config (never committed)
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!.env.example
+
 # System and editor files
 Thumbs.db
 .DS_Store
