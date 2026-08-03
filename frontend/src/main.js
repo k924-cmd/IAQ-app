@@ -1,24 +1,20 @@
-import { state, addLog, addMessage, saveState } from './app/state.js?v=20260803-4';
-import { icon } from './components/icons.js?v=20260803-4';
-import { homePage } from './pages/home.js?v=20260803-4';
-import { devicesPage } from './pages/devices.js?v=20260803-4';
-import { chatPage } from './pages/chat.js?v=20260803-4';
-import { profilePage } from './pages/profile.js?v=20260803-4';
-import { loadBackendSnapshot, sendConversationMessage } from './services/conversation-service.js?v=20260803-4';
-import { toggleMockDevice } from './services/device-service.js?v=20260803-4';
-import { getEnvironmentSnapshot } from './services/environment-service.js?v=20260803-4';
-import { createMockDevices, findDevice, getDeviceMeta, normalizeBackendDevices } from './mocks/devices.js?v=20260803-4';
-import { escapeHtml } from './utils/html.js?v=20260803-4';
+import { state, addLog, addMessage, saveState } from './app/state.js?v=20260804-1';
+import { icon } from './components/icons.js?v=20260804-1';
+import { homePage } from './pages/home.js?v=20260804-1';
+import { devicesPage } from './pages/devices.js?v=20260804-1';
+import { chatPage } from './pages/chat.js?v=20260804-1';
+import { profilePage } from './pages/profile.js?v=20260804-1';
+import { loadBackendSnapshot, sendConversationMessage } from './services/conversation-service.js?v=20260804-1';
+import { toggleMockDevice } from './services/device-service.js?v=20260804-1';
+import { getEnvironmentSnapshot } from './services/environment-service.js?v=20260804-1';
+import { createMockDevices, findDevice, getDeviceMeta, normalizeBackendDevices } from './mocks/devices.js?v=20260804-1';
+import { escapeHtml } from './utils/html.js?v=20260804-1';
+import { messageSignature, structuredMessageHtml } from './components/message-cards.js?v=20260804-1';
 import {
   formatObservedAt,
-  getActionLabel,
   getDeviceStateLabel,
-  getReceiptPresentation,
-  getResponsePresentation,
-  getSourceLabel,
-  getTaskName,
-  getTaskPresentation
-} from './presentation.js?v=20260803-4';
+  getSourceLabel
+} from './presentation.js?v=20260804-1';
 
 const root = document.querySelector('#app');
 let environment = await getEnvironmentSnapshot();
@@ -58,67 +54,49 @@ function deviceDetailModal(deviceId) {
   const source = getSourceLabel(device.source);
   const connection = device.connectionStatus === 'online' ? '在线' : device.connectionStatus === 'offline' ? '离线' : '不可用';
   const support = device.controlSupport === 'supported' ? 'V1 支持' : device.controlSupport === 'read_only' ? '只读' : '待接入';
-  return `<div class="modal device-detail-modal"><section class="device-detail-sheet" role="dialog" aria-modal="true"><header><span class="device-detail-icon">${icon(meta.icon)}</span><div><span class="eyebrow">${escapeHtml(device.room.toUpperCase())} DEVICE</span><h2>${escapeHtml(device.name)}</h2><span class="connection-pill ${device.connectionStatus === 'online' ? 'connected' : ''}">${source} · ${connection}</span></div><button data-action="close" aria-label="关闭设备详情">×</button></header><p class="device-detail-copy">${state.connection.status === 'connected' ? '这是本地后端返回的可信 Mock 快照。设备控制请通过 AI 对话进入确认、策略和回执链路。' : '这是本地 UI Mock，仅供浏览器界面演示，不连接后端或真实设备。'}</p><div class="device-detail-grid"><article><span>设备状态</span><b>${getDeviceStateLabel(device.state)}</b></article><article><span>数据来源</span><b>${source}</b></article><article><span>连接状态</span><b>${connection}</b></article><article><span>控制能力</span><b>${support}</b></article></div><div class="device-constraint-panel"><span class="constraint-chip">${state.connection.status === 'connected' ? '后端快照' : 'UI Mock'}</span><div><span>观测时间</span><b>${formatObservedAt(device.observedAt)}</b></div></div>${localInteractive ? `<div class="device-detail-actions"><button data-device-action="toggle" data-device-id="${escapeHtml(device.id)}">切换本地演示状态</button></div>` : '<div class="device-unavailable-note">当前页面不直接创建或映射后端任务。</div>'}</section></div>`;
+  return `<div class="modal device-detail-modal"><section class="device-detail-sheet" role="dialog" aria-modal="true"><header><span class="device-detail-icon">${icon(meta.icon)}</span><div><span class="eyebrow">${escapeHtml(device.room.toUpperCase())} DEVICE</span><h2>${escapeHtml(device.name)}</h2><span class="connection-pill ${device.connectionStatus === 'online' ? 'connected' : ''}">${source} · ${connection}</span></div><button data-action="close" aria-label="关闭设备详情">×</button></header><p class="device-detail-copy">${state.connection.status === 'connected' ? '这是本地后端返回的可信 Mock 快照。设备控制请通过 AI 对话进入策略与回执链路。' : '这是本地 UI Mock，仅供浏览器界面演示，不连接后端或真实设备。'}</p><div class="device-detail-grid"><article><span>设备状态</span><b>${getDeviceStateLabel(device.state)}</b></article><article><span>数据来源</span><b>${source}</b></article><article><span>连接状态</span><b>${connection}</b></article><article><span>控制能力</span><b>${support}</b></article></div><div class="device-constraint-panel"><span class="constraint-chip">${state.connection.status === 'connected' ? '后端快照' : 'UI Mock'}</span><div><span>观测时间</span><b>${formatObservedAt(device.observedAt)}</b></div></div>${localInteractive ? `<div class="device-detail-actions"><button data-device-action="toggle" data-device-id="${escapeHtml(device.id)}">切换本地演示状态</button></div>` : '<div class="device-unavailable-note">当前页面不直接创建或映射后端任务。</div>'}</section></div>`;
 }
 
-function taskHtml(task) {
-  if (!task) return '';
-  const status = getTaskPresentation(task.status);
-  const schedule = task.scheduledFor ? `<small>计划时间：${formatObservedAt(task.scheduledFor)}</small>` : '';
-  return `<section class="message-card task-message ${status.tone}"><header><span>${status.icon}</span><b>${getTaskName(task)}</b><strong>${status.icon} ${status.label}</strong></header>${schedule}<small>版本 ${task.taskVersion} · 来源 ${getSourceLabel(task.executionSource)}${task.isSimulation ? ' · 模拟优化' : ''}</small></section>`;
-}
-
-function confirmationHtml(confirmation) {
-  if (!confirmation) return '';
-  const pending = confirmation.status === 'pending';
-  const resolution = {
-    pending: '✓ 待确认',
-    confirmed: '✓ 已确认',
-    cancelled: '× 已取消',
-    expired: '⌛ 已过期',
-    invalidated: '! 已失效'
-  }[confirmation.status] || '? 状态未知';
-  return `<section class="message-card confirmation-card"><header><span>✓</span><b>确认计划</b><strong>${resolution}</strong></header><p>${escapeHtml(confirmation.plan?.summary || '请确认是否继续。')}</p><small>有效至 ${formatObservedAt(confirmation.expiresAt)}</small>${pending ? `<div class="message-actions"><button data-continuation-type="confirmation" data-continuation-id="${escapeHtml(confirmation.confirmationId)}" data-continuation-message="确认">确认</button><button class="secondary" data-continuation-type="confirmation" data-continuation-id="${escapeHtml(confirmation.confirmationId)}" data-continuation-message="取消">取消</button></div>` : ''}</section>`;
-}
-
-function clarificationHtml(clarification) {
-  if (!clarification) return '';
-  const options = Array.isArray(clarification.options) ? clarification.options : [];
-  return `<section class="message-card clarification-card"><header><span>?</span><b>需要补充信息</b><strong>${clarification.resolved ? '✓ 已补充' : '? 待澄清'}</strong></header><p>${escapeHtml(clarification.prompt)}</p>${options.length && !clarification.resolved ? `<div class="message-actions option-actions">${options.map(option => `<button data-continuation-type="clarification" data-continuation-id="${escapeHtml(clarification.clarificationId)}" data-continuation-message="${escapeHtml(option)}">${escapeHtml(option)}</button>`).join('')}</div>` : ''}</section>`;
-}
-
-function receiptHtml(receipt) {
-  if (!receipt) return '';
-  const result = getReceiptPresentation(receipt.status);
-  const actions = Array.isArray(receipt.actions) ? receipt.actions : [];
-  return `<section class="message-card receipt-card ${result.tone}"><header><span>${result.icon}</span><b>执行回执</b><strong>${result.icon} ${result.label}</strong></header><div class="receipt-actions">${actions.map(action => {
-    const actionResult = getReceiptPresentation(action.status);
-    const device = findDevice(action.deviceId, state.devices);
-    return `<article><span>${actionResult.icon}</span><div><b>${escapeHtml(device?.name || action.deviceId)} · ${escapeHtml(getActionLabel(action.requestedAction))}</b><small>${actionResult.label}${action.actualState ? ` · ${getDeviceStateLabel(action.actualState)}` : ''}${action.errorCode ? ` · ${escapeHtml(action.errorCode)}` : ''}</small></div></article>`;
-  }).join('')}</div><small>来源 ${getSourceLabel(receipt.source)} · ${formatObservedAt(receipt.completedAt)}</small></section>`;
-}
-
-function errorHtml(error, responseType) {
-  if (!error && !['rejection', 'error'].includes(responseType)) return '';
-  const isRejection = responseType === 'rejection';
-  return `<section class="message-card error-card ${isRejection ? 'rejection' : 'error'}"><header><span>${isRejection ? '×' : '!'}</span><b>${isRejection ? '请求已拒绝' : '请求出错'}</b><strong>${escapeHtml(error?.code || (isRejection ? 'REJECTED' : 'ERROR'))}</strong></header>${error?.message ? `<p>${escapeHtml(error.message)}</p>` : ''}${error?.retryable ? '<small>可以稍后重试</small>' : '<small>请调整请求后重试</small>'}</section>`;
-}
-
-function sourcesHtml(sources, sourceMode) {
-  const items = Array.isArray(sources) ? sources : [];
-  if (!items.length && sourceMode !== 'ui_mock') return '';
-  return `<div class="source-chips">${sourceMode === 'ui_mock' ? '<span>本地 UI Mock · 未连接后端</span>' : ''}${items.map(source => `<span>${getSourceLabel(source.type)} · ${formatObservedAt(source.observedAt)}</span>`).join('')}</div>`;
-}
-
-function structuredMessageHtml(message) {
-  const presentation = message.role === 'assistant' ? getResponsePresentation(message.responseType) : null;
-  return `<div class="message-block ${message.role === 'user' ? 'user' : 'assistant'}"><div class="bubble ${message.role === 'user' ? 'user' : ''}${message.status === 'pending' ? ' streaming' : ''}${message.status === 'error' ? ' bubble-error' : ''}">${presentation ? `<span class="response-label ${presentation.tone}">${presentation.icon} ${presentation.label}</span>` : ''}<p>${escapeHtml(message.content)}</p></div>${confirmationHtml(message.confirmation)}${clarificationHtml(message.clarification)}${taskHtml(message.task)}${receiptHtml(message.receipt)}${errorHtml(message.error, message.responseType)}${sourcesHtml(message.sources, message.sourceMode)}</div>`;
-}
+const renderedMessageSignatures = new Map();
 
 function renderMessages() {
   const container = document.querySelector('.messages');
   if (!container) return;
-  container.innerHTML = state.messages.map(structuredMessageHtml).join('');
+  const messages = state.messages;
+  if (container.childElementCount === 0) {
+    container.innerHTML = messages.map(message => structuredMessageHtml(message, state.devices)).join('');
+    renderedMessageSignatures.clear();
+    for (const message of messages) renderedMessageSignatures.set(message.id, messageSignature(message));
+    return;
+  }
+  const children = Array.from(container.children);
+  const nextSignatures = new Map();
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    const signature = messageSignature(message);
+    const element = children[index];
+    if (element?.dataset.messageId === message.id && renderedMessageSignatures.get(message.id) === signature) {
+      nextSignatures.set(message.id, signature);
+      continue;
+    }
+    const fragment = document.createRange().createContextualFragment(messages.slice(index).map(item => structuredMessageHtml(item, state.devices)).join(''));
+    if (element) {
+      const stale = [];
+      let sibling = element.nextSibling;
+      while (sibling) {
+        stale.push(sibling);
+        sibling = sibling.nextSibling;
+      }
+      element.replaceWith(fragment);
+      stale.forEach(node => node.remove());
+    } else {
+      container.appendChild(fragment);
+    }
+    for (const item of messages.slice(index)) nextSignatures.set(item.id, messageSignature(item));
+    break;
+  }
+  renderedMessageSignatures.clear();
+  for (const [id, signature] of nextSignatures) renderedMessageSignatures.set(id, signature);
 }
 
 function render() {
@@ -250,13 +228,23 @@ function resolveContinuation(continuation, response, submittedText) {
   }
 }
 
+function setStreamingUi(isStreaming) {
+  const input = document.querySelector('#chat-input');
+  if (input) input.disabled = isStreaming;
+  const submit = document.querySelector('#chat-form button[type="submit"]');
+  if (submit) submit.disabled = isStreaming;
+}
+
 async function sendMessage(text, continuation) {
   if (state.isStreaming) return;
   addMessage('user', text, { continuation });
   const pending = addMessage('assistant', 'Luna 正在整理回复', { responseType: 'chat' });
   pending.status = 'pending';
   state.isStreaming = true;
-  render();
+  setStreamingUi(true);
+  renderMessages();
+  bind();
+  scrollChat(true);
   try {
     const response = await sendConversationMessage(text, { continuation });
     if (response.transportMode === 'ui_mock') {
@@ -266,16 +254,23 @@ async function sendMessage(text, continuation) {
     }
     if (response.transportMode === 'backend') resolveContinuation(continuation, response, text);
     applyConversationResponse(pending, response);
+    renderMessages();
+    bind();
+    scrollChat(true);
   } catch {
     await useUiMockSnapshot();
     pending.content = '本地 UI Mock / 未连接后端：暂时无法生成演示回复，请稍后再试。';
     pending.status = 'error';
     pending.responseType = 'error';
     pending.sourceMode = 'ui_mock';
+    renderMessages();
+    bind();
+    scrollChat(true);
   } finally {
     state.isStreaming = false;
+    setStreamingUi(false);
     saveState();
-    render();
+    if (state.tab === 'chat') scrollChat(true);
   }
 }
 

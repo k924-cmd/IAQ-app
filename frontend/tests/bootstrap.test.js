@@ -94,6 +94,6 @@ test('旧 Service Worker 控制页面时，入口独立注销并只清理呼吸�
   assert.deepEqual(events.slice(0, 3), ['unregister', 'cache-keys', 'delete:breath-forest-ui-v2']);
   assert.equal(events.some(event => event === 'delete:another-app-cache'), false);
   const replacement = events.find(event => event.startsWith('replace:'));
-  assert.match(replacement, /bf-bootstrap=20260803-4/);
+  assert.match(replacement, /bf-bootstrap=20260804-1/);
   assert.equal(events.some(event => event.startsWith('error:')), false);
 });

@@ -1,10 +1,10 @@
 const CACHE_NAME = 'breath-forest-ui-v4';
 const CORE_ASSETS = [
-  './', './index.html', './styles.css?v=20260803-4', './manifest.webmanifest', './src/main.js?v=20260803-4',
-  './src/app/state.js?v=20260803-4', './src/components/icons.js?v=20260803-4', './src/presentation.js?v=20260803-4', './src/utils/html.js?v=20260803-4',
-  './src/pages/home.js?v=20260803-4', './src/pages/devices.js?v=20260803-4', './src/pages/chat.js?v=20260803-4', './src/pages/profile.js?v=20260803-4',
-  './src/services/conversation-service.js?v=20260803-4', './src/services/device-service.js?v=20260803-4', './src/services/environment-service.js?v=20260803-4',
-  './src/mocks/conversation.js?v=20260803-4', './src/mocks/devices.js?v=20260803-4', './src/mocks/environment.js?v=20260803-4',
+  './', './index.html', './styles.css?v=20260804-1', './manifest.webmanifest', './src/main.js?v=20260804-1',
+  './src/app/state.js?v=20260804-1', './src/components/icons.js?v=20260804-1', './src/components/message-cards.js?v=20260804-1', './src/presentation.js?v=20260804-1', './src/utils/html.js?v=20260804-1',
+  './src/pages/home.js?v=20260804-1', './src/pages/devices.js?v=20260804-1', './src/pages/chat.js?v=20260804-1', './src/pages/profile.js?v=20260804-1',
+  './src/services/conversation-service.js?v=20260804-1', './src/services/device-service.js?v=20260804-1', './src/services/environment-service.js?v=20260804-1',
+  './src/mocks/conversation.js?v=20260804-1', './src/mocks/devices.js?v=20260804-1', './src/mocks/environment.js?v=20260804-1',
   './icons/luna-192.png', './icons/luna-512.png', './icons/luna-apple.png',
   './assets/breath-forest-living-room.webp', './assets/luna-home-scene.webp', './assets/luna-hero.webp', './assets/luna-overlay-tight.webp',
   './assets/device-fan.webp', './assets/device-fresh.webp', './assets/device-hood.webp',

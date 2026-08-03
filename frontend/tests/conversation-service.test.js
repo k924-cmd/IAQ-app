@@ -176,3 +176,64 @@ test('后端可达但模型不可用时保留结构化公开错误，不降级�
   assert.equal(response.error.code, 'MODEL_UNAVAILABLE');
   assert.equal(response.message.content, '模型服务暂不可用，已按固定模板回复。');
 });
+
+test('DEP-004 窗户明确开关请求透传直接执行回执，不含确认', async () => {
+  let posted;
+  const fetchImpl = async (url, init) => {
+    posted = { body: JSON.parse(init.body) };
+    return jsonResponse({
+      contractVersion: '1.0.0',
+      requestId: 'request-window',
+      conversationId: posted.body.conversationId,
+      message: { id: 'reply-window', role: 'assistant', content: '智能窗户已直接执行打开。', status: 'complete', createdAt: '2026-08-04T00:00:00.000Z' },
+      responseType: 'execution_result',
+      sources: [],
+      receipt: {
+        receiptId: 'receipt-window', requestId: 'request-window', planId: 'plan-window', status: 'succeeded', source: 'mock',
+        actions: [{ actionId: 'a1', deviceId: 'window-1', requestedAction: 'open', actualState: 'open', status: 'succeeded', source: 'mock' }],
+        startedAt: '2026-08-04T00:00:00.000Z', completedAt: '2026-08-04T00:01:00.000Z'
+      }
+    });
+  };
+  const response = await sendConversationMessage('打开窗户', {
+    fetchImpl,
+    storage: memoryStorage(),
+    locale: 'zh-CN',
+    timezone: 'Asia/Shanghai'
+  });
+  assert.equal(response.transportMode, 'backend');
+  assert.equal(response.responseType, 'execution_result');
+  assert.equal(response.confirmation, undefined);
+  assert.equal(response.receipt.status, 'succeeded');
+  assert.equal(response.receipt.actions[0].requestedAction, 'open');
+});
+
+test('DEP-005 多设备澄清选项链路透传 options 且不新增字段', async () => {
+  let posted;
+  const fetchImpl = async (url, init) => {
+    posted = { body: JSON.parse(init.body) };
+    return jsonResponse({
+      contractVersion: '1.0.0',
+      requestId: 'request-split',
+      conversationId: posted.body.conversationId,
+      message: { id: 'reply-split', role: 'assistant', content: 'V1 只支持单设备即时控制，请先拆分请求。', status: 'complete', createdAt: '2026-08-04T00:00:00.000Z' },
+      responseType: 'clarification',
+      sources: [],
+      clarification: {
+        clarificationId: 'clarification-split', originalRequestId: 'request-original', kind: 'device',
+        prompt: '请选择先控制哪一个：', options: ['只打开空气净化器', '只打开智能窗户'],
+        createdAt: '2026-08-04T00:00:00.000Z', expiresAt: '2026-08-04T00:02:00.000Z'
+      }
+    });
+  };
+  const response = await sendConversationMessage('打开净化器和窗户', {
+    fetchImpl,
+    storage: memoryStorage(),
+    locale: 'zh-CN',
+    timezone: 'Asia/Shanghai'
+  });
+  assert.equal(response.transportMode, 'backend');
+  assert.equal(response.responseType, 'clarification');
+  assert.deepEqual(response.clarification.options, ['只打开空气净化器', '只打开智能窗户']);
+  assert.equal(response.clarification.clarificationId, 'clarification-split');
+});

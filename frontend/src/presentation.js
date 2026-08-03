@@ -89,3 +89,24 @@ export function formatObservedAt(value) {
   if (Number.isNaN(date.getTime())) return '时间未知';
   return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 }
+
+export const GENERAL_DISCLAIMER = 'Luna 是 AI 工具噢，我的回答仅供参考。';
+export const MEDICAL_DISCLAIMER = '以上仅为一般性信息，不构成医疗诊断，也不能替代专业医疗建议。';
+
+export function splitDisclaimerContent(content) {
+  const text = String(content ?? '');
+  const candidates = [
+    { kind: 'general', text: GENERAL_DISCLAIMER },
+    { kind: 'medical', text: MEDICAL_DISCLAIMER }
+  ];
+  const found = [];
+  let remaining = text;
+  for (const candidate of candidates) {
+    if (remaining.includes(candidate.text)) {
+      remaining = remaining.split(candidate.text).join('');
+      found.push(candidate);
+    }
+  }
+  found.sort((a, b) => text.indexOf(a.text) - text.indexOf(b.text));
+  return { main: remaining.trim(), items: found };
+}

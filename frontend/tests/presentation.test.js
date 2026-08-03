@@ -4,7 +4,7 @@ import { chatPage } from '../src/pages/chat.js';
 import { devicesPage } from '../src/pages/devices.js';
 import { homePage } from '../src/pages/home.js';
 import { profilePage } from '../src/pages/profile.js';
-import { getReceiptPresentation, getSourceLabel, getTaskPresentation } from '../src/presentation.js';
+import { GENERAL_DISCLAIMER, getReceiptPresentation, getSourceLabel, getTaskPresentation, MEDICAL_DISCLAIMER, splitDisclaimerContent } from '../src/presentation.js';
 import { createMockDevices } from '../src/mocks/devices.js';
 
 const state = {
@@ -42,4 +42,16 @@ test('部分成功回执具有独立文案和图标', () => {
 test('model 来源显示为模型标识，Mock 降级不冒充模型', () => {
   assert.equal(getSourceLabel('model'), '模型');
   assert.equal(getSourceLabel('mock'), 'Mock');
+});
+
+test('DEP-003 免责声明拆分为统一展示块且顺序保留', () => {
+  const result = splitDisclaimerContent(`回答。${GENERAL_DISCLAIMER}${MEDICAL_DISCLAIMER}`);
+  assert.equal(result.main, '回答。');
+  assert.deepEqual(result.items.map(item => item.kind), ['general', 'medical']);
+});
+
+test('DEP-003 无免责句时不改变原文本', () => {
+  const result = splitDisclaimerContent('普通回答');
+  assert.equal(result.main, '普通回答');
+  assert.deepEqual(result.items, []);
 });

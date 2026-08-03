@@ -30,18 +30,62 @@ function messageResponse(body, responseType, content, extra = {}) {
   };
 }
 
-function confirmation(body) {
+function windowReceipt(body) {
+  const closing = body.message.includes('关闭');
+  const noop = closing;
+  return messageResponse(body, 'execution_result', noop ? '智能窗户已处于关闭状态，无需重复执行。' : '智能窗户已直接执行打开。', {
+    receipt: {
+      receiptId: `receipt-${Date.now()}`, requestId: `request-${Date.now()}`, planId: 'plan-window-direct',
+      status: noop ? 'noop' : 'succeeded',
+      actions: [{ actionId: 'action-window', deviceId: 'window-fixture', requestedAction: closing ? 'close' : 'open', actualState: closing ? 'closed' : 'open', status: noop ? 'noop' : 'succeeded', source: 'mock' }],
+      source: 'mock', startedAt: now(), completedAt: now()
+    }
+  });
+}
+
+function cookingGuardConfirmation(body) {
   const createdAt = now();
   const expiresAt = new Date(Date.now() + 120000).toISOString();
-  return messageResponse(body, 'confirmation', '智能窗户状态改变需要确认。', {
+  return messageResponse(body, 'confirmation', '创建烹饪空气守护任务需要确认。', {
     confirmation: {
       confirmationId: 'confirmation-fixture', conversationId: body.conversationId,
       plan: {
-        planId: 'plan-window', planHash: 'a'.repeat(64), kind: 'single_device', summary: '打开客厅智能窗户（本地 Mock）',
-        actions: [{ actionId: 'action-window', deviceId: 'window-fixture', deviceType: 'smart_window', action: 'open', targetState: 'open', expectedStateVersion: 1 }],
+        planId: 'plan-cooking', planHash: 'a'.repeat(64), kind: 'cooking_guard', summary: '创建烹饪守护：立即开始，持续至你停止（本地 Mock）',
+        actions: [], requiresConfirmation: true, createdAt, expiresAt
+      },
+      deviceStateVersions: {}, status: 'pending', createdAt, expiresAt
+    }
+  });
+}
+
+function cookingGuardCreated(body) {
+  return messageResponse(body, 'task_status', '烹饪空气守护任务已创建并运行中。', {
+    task: { taskId: 'task-cooking', scopeId: 'scope-fixture', taskVersion: 1, type: 'cooking_guard', status: 'running', isSimulation: true, executionSource: 'mock', createdAt: now(), updatedAt: now() }
+  });
+}
+
+function deviceSplitClarification(body) {
+  return messageResponse(body, 'clarification', 'V1 只支持单设备即时控制，请先拆分请求。', {
+    clarification: {
+      clarificationId: 'clarification-split-fixture', originalRequestId: 'request-original', kind: 'device',
+      prompt: '一次请求包含多个设备，请选择先控制哪一个：', options: ['只打开空气净化器', '只打开智能窗户'],
+      createdAt: now(), expiresAt: new Date(Date.now() + 120000).toISOString()
+    }
+  });
+}
+
+function confirmation(body) {
+  const createdAt = now();
+  const expiresAt = new Date(Date.now() + 120000).toISOString();
+  return messageResponse(body, 'confirmation', '任务替换需要确认。', {
+    confirmation: {
+      confirmationId: 'confirmation-fixture', conversationId: body.conversationId,
+      plan: {
+        planId: 'plan-replace', planHash: 'c'.repeat(64), kind: 'task_replacement', summary: '替换当前任务（本地 Mock）',
+        actions: [],
         requiresConfirmation: true, createdAt, expiresAt
       },
-      deviceStateVersions: { 'window-fixture': 1 }, status: 'pending', createdAt, expiresAt
+      deviceStateVersions: {}, status: 'pending', createdAt, expiresAt
     }
   });
 }
@@ -62,8 +106,11 @@ function receipt(body, partial = false) {
 }
 
 function routeMessage(body) {
-  if (body.continuation?.type === 'confirmation') return receipt(body, false);
-  if (body.message.includes('打开窗户')) return confirmation(body);
+  if (body.continuation?.type === 'confirmation') return cookingGuardCreated(body);
+  if (body.message.includes('打开窗户') || body.message.includes('关闭窗户')) return windowReceipt(body);
+  if (body.message.includes('净化器') && body.message.includes('窗户')) return deviceSplitClarification(body);
+  if (body.message.includes('烹饪守护')) return cookingGuardConfirmation(body);
+  if (body.message.includes('替换')) return confirmation(body);
   if (body.message.includes('优化一下')) return messageResponse(body, 'clarification', '请选择一种模拟优化模式。', {
     clarification: { clarificationId: 'clarification-fixture', originalRequestId: 'request-original', kind: 'mode', prompt: '请选择模拟优化模式', options: ['舒适优先', '均衡自动', '低碳优先'], createdAt: now(), expiresAt: new Date(Date.now() + 120000).toISOString() }
   });
@@ -71,7 +118,10 @@ function routeMessage(body) {
   if (body.message.includes('暂停')) return messageResponse(body, 'task_status', '模拟优化任务已暂停。', { task: task('paused') });
   if (body.message.includes('拒绝')) return messageResponse(body, 'rejection', '该请求不在 V1 支持范围内。', { error: { code: 'POLICY_REJECTED', message: '该请求不在 V1 支持范围内。', retryable: false, requestId: 'request-rejection' } });
   if (body.message.includes('错误')) return messageResponse(body, 'error', '服务暂时无法处理该请求。', { error: { code: 'SERVICE_UNAVAILABLE', message: '服务暂时无法处理该请求。', retryable: true, requestId: 'request-error' } });
-  return messageResponse(body, 'chat', '这是本地 Mock 后端返回的对话结果。');
+  if (body.message.includes('咳嗽') || body.message.includes('症状')) {
+    return messageResponse(body, 'knowledge', '一般性信息：开窗通风有助于降低室内颗粒物浓度。Luna 是 AI 工具噢，我的回答仅供参考。以上仅为一般性信息，不构成医疗诊断，也不能替代专业医疗建议。');
+  }
+  return messageResponse(body, 'chat', '这是本地 Mock 后端返回的对话结果。Luna 是 AI 工具噢，我的回答仅供参考。');
 }
 
 const server = createServer((request, response) => {

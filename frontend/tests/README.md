@@ -7,4 +7,4 @@ cd frontend
 npm test
 ```
 
-当前覆盖入口页独立注销旧 Service Worker/清理应用缓存与版本化动态导入、对话请求标识、locale/timezone/continuation、health/bootstrap 启动顺序、断线 UI Mock 降级、model 来源与结构化公开错误保留、四页面来源标识、快捷场景边界、任务状态和部分成功文案。
+当前覆盖入口页独立注销旧 Service Worker/清理应用缓存与版本化动态导入、对话请求标识、locale/timezone/continuation、health/bootstrap 启动顺序、断线 UI Mock 降级、model 来源与结构化公开错误保留、免责声明/医疗强化句统一样式、窗户免确认回执、澄清选项链路、消息增量签名与可读时间、四页面来源标识、快捷场景边界、任务状态和部分成功文案。
