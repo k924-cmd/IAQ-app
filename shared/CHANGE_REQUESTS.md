@@ -83,7 +83,7 @@
 | 优先级 | P1 |
 | 负责人 | Coordination / Backend |
 | 验收条件 | 待产品线更新 AC 后补充；须包含自然语言回复、知识边界、医疗边界、降级口径 |
-| 状态 | accepted |
+| 状态 | closed |
 | 目标版本 | AI Assistant V1 |
 | 最后更新 | 2026-08-03 |
 
@@ -112,3 +112,13 @@
 - `SendMessageResponse.message.content` 语义不变：始终是面向用户的展示文本；真实模型仅参与生成 `content`，不改写 `responseType`、`sources` 结构与业务字段。
 - `sources` 保留原有含义：本次新增来源 `model` 与 `observedAt`（调用时间），`referenceId` 可省略或放稳定模型标识。
 - 结论：共享契约 v1.0.0 **无需版本化升级**；后端实现按现有 Schema 输出即可。产品线仍需补充 AC（自然语言回复、知识边界、医疗边界、降级口径）。
+
+### 关闭记录
+
+- 产品线新增 AC-014～AC-019 并修订 AC-011～AC-013（见 `product/ACCEPTANCE_CRITERIA.md`、`product/decisions/D-2026-08-03-REAL-MODEL-CHAT-KNOWLEDGE-ACCEPTANCE.md`）。
+- 后端线实现 `DeepSeekModelAdapter`（默认关闭、密钥本地注入、max_tokens≤512、超时 15s、不重试），接入 `#chat`/`#knowledge` 回复生成；模型输出经 `reply-safety.js` 文本边界守卫，不可用时回退固定模板；全量测试 103/103 通过。
+- 路由修复：问候开头优先于通用知识兜底，`你好，简单介绍一下自己` 归为 `chat`；主题知识、急症、设备控制仍优先；新增路由测试。
+- 前端线确认 v1.0.0 展示路径兼容 `model` 来源，补充断线/降级验证；测试 14/14 通过。
+- 运营线更新事件口径与发布检查第 7 节（真实模型调用授权、密钥、成本上限、事件脱敏）。
+- 真实模型调用已按授权完成一次本地验证：`demo:model` 返回 `sources[0].type === "model"`、`referenceId: "deepseek-chat"`，医疗边界声明保留；验证不构成设备/环境事实。
+- 遗留：真实模型开放域回复的文本边界由固定正则守卫，后续按 AC-014～019 持续验收；发布前需在目标环境核验成本上限与密钥注入。
