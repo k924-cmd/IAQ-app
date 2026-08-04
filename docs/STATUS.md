@@ -6,9 +6,9 @@
 ## 基线快照
 
 - 最后更新：2026-08-04（Asia/Shanghai）
-- 主线 HEAD：`a3a7011`（`docs: mark presentation append naming issue resolved`）
-- 说明：`3bc91a3`（`docs: sync status baseline with closed DEP-003/004/005`）为 DEP-003/004/005 关闭基线；其后的运营交付物并入（`b53e383`）、产品编号修正（`8339603`）与验收记录更新（`a3a7011`）均已并入 main。
-- 远端同步：本地与 `origin/main` 一致（已推送）
+- 主线 HEAD：`fd4d5a3`（`docs: finalize four-item wrap-up status`）
+- 说明：`3bc91a3`（`docs: sync status baseline with closed DEP-003/004/005`）为 DEP-003/004/005 关闭基线；其后的运营交付物并入（`b53e383`）、产品编号修正（`8339603`）、验收记录更新（`a3a7011`）与四项收尾（`fd4d5a3`）均已并入 main。
+- 远端同步：本地与 `origin/main` 一致（`fd4d5a3`，已推送）
 - 工作树：干净
 
 ## 当前目标（已关闭）
@@ -44,7 +44,7 @@
 
 ## Worktree 说明
 
-- `C:\Users\Administrator\.codex\worktrees\8cc0\codex_IAQapp`（HEAD `321e761`，detached）：当前只读咨询窗口的工作目录，暂不清理；待该窗口确认迁移到新线程后，由协调窗口安排清理。
+- `C:\Users\Administrator\.codex\worktrees\8cc0\codex_IAQapp`（原 HEAD `321e761`，detached）：只读咨询窗口工作目录已清理（2026-08-04）。
 
 ## 共享契约（`shared/**`，协调窗口维护）
 
